@@ -2,7 +2,7 @@
 import {
   GRADES, MASTERY_PER_GRADE, SUBJECTS, SYSTEMS, DIFFICULTY,
   STUDY_ACTIONS, RELIEF_ACTIONS, PRESSURE, CALENDAR,
-  TRAITS, TRAIT_BY_ID, APTITUDE, LUCK, DIMINISHING, STUDY_SCALE, SICK,
+  TRAITS, TRAIT_BY_ID, APTITUDE, LUCK, DIMINISHING, STUDY_SCALE, SICK, FAST,
 } from './constants.js';
 
 const SUBJECT_BY_KEY = Object.fromEntries(SUBJECTS.map((s) => [s.key, s]));
@@ -103,14 +103,17 @@ export function traitMods(traits) {
   );
 }
 
-export function createGame({ system, difficulty, x, names, seed = 1 }) {
+export function createGame({ system, difficulty, x, names, seed = 1, fast = false }) {
   const diff = DIFFICULTY[difficulty];
-  const years = SYSTEMS[system].years;
+  // 快速模式只保留学制的最后一年（高三），普通模式保留全部学年
+  const allYears = SYSTEMS[system].years;
+  const years = fast ? allYears.slice(-FAST.yearIndexFromEnd) : allYears;
   const rng = mulberry32(seed);
   return {
     system,
     difficulty,
     x,
+    fast,
     years,
     totalWeeks: years.length * 2 * CALENDAR.weeksPerSemester,
     absWeek: 0,
@@ -209,7 +212,8 @@ function doStudy(state, { actionId, students: ids, subjects: keys, seed }) {
       const before = st.mastery[k];
       // 收益递减：熟练度越高，本次增幅越小
       const dim = Math.max(DIMINISHING.floor, 1 - before / DIMINISHING.cap);
-      const delta = action.gain * STUDY_SCALE * mult * mods.gain * st.aptitude[k] * luck * dim * sickMult;
+      const fastMult = state.fast ? FAST.studyMult : 1; // 快速模式：学习更快
+      const delta = action.gain * STUDY_SCALE * fastMult * mult * mods.gain * st.aptitude[k] * luck * dim * sickMult;
       st.mastery[k] = clamp(before + delta, 0, 100);
       total += st.mastery[k] - before;
     }

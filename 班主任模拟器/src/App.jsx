@@ -33,9 +33,9 @@ export default function App() {
   }, [themeId]);
 
   // 开局
-  const start = ({ system, difficulty, x, nameText }) => {
+  const start = ({ system, difficulty, x, nameText, fast }) => {
     const names = parseNames(nameText, x);
-    dispatch({ type: 'START', payload: { system, difficulty, x, names, seed: newSeed() } });
+    dispatch({ type: 'START', payload: { system, difficulty, x, names, seed: newSeed(), fast } });
     setTab('students');
     setSelectedExam(null);
   };
@@ -202,7 +202,7 @@ function Header({ state, stats, onReset, themeId, onThemeChange }) {
         <div>
           <h1>班主任模拟器</h1>
           <small>
-            {SYSTEMS[state.system].name} · {DIFFICULTY[state.difficulty].name} · {state.x} 人
+            {SYSTEMS[state.system].name} · {DIFFICULTY[state.difficulty].name} · {state.x} 人{state.fast ? ' · ⚡快速模式' : ''}
           </small>
         </div>
       </div>

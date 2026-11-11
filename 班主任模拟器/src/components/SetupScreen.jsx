@@ -1,11 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { SYSTEMS, DIFFICULTY } from '../constants.js';
+import { SYSTEMS, DIFFICULTY, FAST } from '../constants.js';
 import { parseNames } from '../engine.js';
 
-/** 开局设置：学制、难度、人数、姓名 */
+/** 开局设置：学制、难度、人数、姓名、快速模式 */
 export default function SetupScreen({ onStart }) {
   const [system, setSystem] = useState('63');
   const [difficulty, setDifficulty] = useState('normal');
+  const [fast, setFast] = useState(false);
   const [x, setX] = useState(30);
   const [nameText, setNameText] = useState('');
 
@@ -32,6 +33,19 @@ export default function SetupScreen({ onStart }) {
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="field">
+          <label>模式</label>
+          <div className="seg wide">
+            <button className={!fast ? 'on' : ''} onClick={() => setFast(false)}>完整模式（全部学年）</button>
+            <button className={fast ? 'on' : ''} onClick={() => setFast(true)}>⚡ {FAST.label}</button>
+          </div>
+          <small className="muted">
+            {fast
+              ? `只模拟高三上下两个学期（40 周），学习效率 ×${FAST.studyMult}。`
+              : '按学制完整模拟所有学年。'}
+          </small>
         </div>
 
         <div className="field">
@@ -75,7 +89,7 @@ export default function SetupScreen({ onStart }) {
         <button
           className="btn-primary big"
           disabled={!valid}
-          onClick={() => onStart({ system, difficulty, x: n, nameText })}
+          onClick={() => onStart({ system, difficulty, x: n, nameText, fast })}
         >
           🚀 开始班级生活
         </button>

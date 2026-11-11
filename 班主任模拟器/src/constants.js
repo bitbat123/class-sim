@@ -35,6 +35,13 @@ export const SUBJECTS = [
   { key: 'politics', name: '政治', short: '政', max: 100 },
 ];
 
+// 快速模式：只模拟高三一年（两个学期），学习增幅更高
+export const FAST = {
+  label: '快速模式（只模拟高三一年）',
+  studyMult: 3,           // 学习增幅倍率（相对普通模式）
+  yearIndexFromEnd: 1,    // 取学制最后一年（高三）
+};
+
 // 学制
 export const SYSTEMS = {
   '63': { name: '六三制', years: ['初一', '初二', '初三', '高一', '高二', '高三'] },
