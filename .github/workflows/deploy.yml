@@ -1,4 +1,4 @@
-name: Deploy to GitHub Pages
+﻿name: Deploy game to GitHub Pages
 
 on:
   push:
@@ -14,6 +14,10 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+defaults:
+  run:
+    working-directory: 班主任模拟器
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -26,6 +30,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
+          cache-dependency-path: 班主任模拟器/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -36,13 +41,12 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
         with:
-          # 若仓库尚未启用 Pages，自动启用（Source 选 GitHub Actions）
           enablement: true
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: 班主任模拟器/dist
 
   deploy:
     environment:
