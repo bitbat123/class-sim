@@ -13,6 +13,9 @@ import { THEMES, THEME_BY_ID } from './themes.js';
 
 const newSeed = () => Math.floor(Math.random() * 4294967296);
 
+// 回到游戏主页（域名根路径）
+const HOME_URL = 'https://bitbat123.github.io/';
+
 export default function App() {
   const [state, dispatch] = useReducer(gameReducer, null);
   const [tab, setTab] = useState('students'); // students | exam
@@ -211,6 +214,7 @@ function Header({ state, stats, onReset, themeId, onThemeChange }) {
         <Stat label="全班平均等级" value={stats.avgGrade} accent={avgColor} />
       </div>
       <ThemePicker themeId={themeId} onChange={onThemeChange} />
+      <a className="btn-ghost home-link" href={HOME_URL}>🏠 主页</a>
       <button className="btn-ghost" onClick={onReset}>↺ 重开</button>
     </header>
   );

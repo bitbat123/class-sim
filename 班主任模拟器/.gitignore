@@ -3,3 +3,5 @@ dist
 *.log
 *.tmp
 *.tmpdir/
+.vite
+
