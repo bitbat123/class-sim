@@ -35,18 +35,21 @@ export const SUBJECTS = [
   { key: 'politics', name: '政治', short: '政', max: 100 },
 ];
 
-// 快速模式：只模拟高三一年（两个学期），学习增幅更高
-export const FAST = {
-  label: '快速模式（只模拟高三一年）',
-  studyMult: 3,           // 学习增幅倍率（相对普通模式）
-  yearIndexFromEnd: 1,    // 取学制最后一年（高三）
-};
-
 // 学制
 export const SYSTEMS = {
   '63': { name: '六三制', years: ['初一', '初二', '初三', '高一', '高二', '高三'] },
   '54': { name: '五四制', years: ['预初', '初一', '初二', '初三', '高一', '高二', '高三'] },
 };
+
+// 时长模式：决定模拟学制的最后几年（yearCount 为空则使用学制全部学年）
+export const MODES = {
+  full: { name: '完整模式', desc: '按学制完整模拟所有学年', yearCount: null },
+  three: { name: '三年模式', desc: '只模拟高一、高二、高三（3 个学年）', yearCount: 3 },
+  one: { name: '一年模式', desc: '只模拟高三一年（2 个学期）', yearCount: 1 },
+};
+
+// 时长倍率：学习行动的熟练度增幅 × 倍率（时间越短，每周成长越快）
+export const TIME_SCALE = { full: 1, three: 2.2, one: 4.5 };
 
 // 难度：开局班费 / 每周班费收入（x 为学生人数）
 export const DIFFICULTY = {
@@ -171,6 +174,51 @@ export const CALENDAR = {
   eventChance: 0.65,                 // 每周至少发生一件随机事件的概率（原 0.35）
   extraEventChance: 0.35,            // 已发生事件后，再追加一件的概率（可连环发生）
   maxEventsPerWeek: 3,               // 每周最多随机事件数
+};
+
+// 班级士气（0~100）：好事件 / 坏事件 / 考试 / 崩溃等带来的变化量
+export const MORALE = {
+  start: 60,
+  goodEvent: 6,        // 正面随机事件
+  badEvent: -6,        // 负面随机事件
+  collapse: -15,       // 每有一名学生崩溃
+  examHigh: 5,         // 考试班级均分率 ≥ examHighRate
+  examLow: -5,         // 考试班级均分率 ≤ examLowRate
+  examHighRate: 0.75,
+  examLowRate: 0.45,
+  relief: 2,           // 每次减压行动
+  goalDone: 10,        // 学期小目标达成
+  goalFail: -4,        // 学期小目标未达成
+  achievement: 3,      // 每解锁一个成就
+  pressureHigh: 60,    // 全班平均压力 > 此值：每周 weeklyDrop
+  weeklyDrop: -2,
+  pressureLow: 30,     // 全班平均压力 < 此值：每周 weeklyGain
+  weeklyGain: 1,
+};
+
+// 班主任便签：每周随机抽一条，按士气高低选择语气
+export const TEACHER_NOTES = {
+  high: [
+    '今天的班会气氛特别好，孩子们笑得很开心。',
+    '收到几位家长发来的感谢短信，继续保持！',
+    '班里的小组竞赛打破了纪录，大家都很骄傲。',
+    '早读声音特别整齐，走廊上都能听见。',
+    '有学生主动帮我擦黑板，这种小事最暖心。',
+  ],
+  mid: [
+    '周一的升旗仪式上，班级队形整齐了不少。',
+    '值日表需要重新排一排了，有人总是忘记。',
+    '期待下周的班级活动，大家可以多想想点子。',
+    '班级图书角的书又少了几本，记得提醒一下。',
+    '午休时间有人讲话，明天班会可以聊聊纪律。',
+  ],
+  low: [
+    '教室里有些低气压，今天找几个孩子聊聊吧。',
+    '作业交得越来越晚，需要和家长沟通一下。',
+    '最近睡眠不足的同学变多了，注意休息。',
+    '有学生在日记里写“不想上学”，要多关注。',
+    '班级群里的抱怨变多了，先倾听再想办法。',
+  ],
 };
 
 // 成绩颜色（按得分率，百分比 0~100 为阈值）——100 分制科目（物/化/生/史/地/政）

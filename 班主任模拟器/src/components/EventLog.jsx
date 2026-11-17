@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 
 const ICON = {
-  week: '📅', action: '🎮', exam: '📊', event: '🎲', relief: '🌤', warn: '⚠️', danger: '💥', info: '💬',
+  week: '📅', action: '🎮', exam: '📊', event: '🎲', relief: '🌤', warn: '⚠️', danger: '💥', info: '💬', goal: '🎯', achv: '🏅',
 };
 
 /**

@@ -1,5 +1,5 @@
 import React, { useReducer, useState, useMemo, useEffect } from 'react';
-import { GRADE_COLORS, SUBJECTS, SYSTEMS, DIFFICULTY } from './constants.js';
+import { GRADE_COLORS, SUBJECTS, SYSTEMS, DIFFICULTY, MODES } from './constants.js';
 import { gameReducer, parseNames, termLabel, classStats, gradeIndex } from './engine.js';
 import StudentCard from './components/StudentCard.jsx';
 import ActionPanel from './components/ActionPanel.jsx';
@@ -8,6 +8,9 @@ import EventLog from './components/EventLog.jsx';
 import Legend from './components/Legend.jsx';
 import SetupScreen from './components/SetupScreen.jsx';
 import ThemePicker from './components/ThemePicker.jsx';
+import MoralePanel from './components/MoralePanel.jsx';
+import PeerPanel from './components/PeerPanel.jsx';
+import { useRoom } from './net/useRoom.js';
 import { scoreColor } from './components/colors.js';
 import { THEMES, THEME_BY_ID } from './themes.js';
 
@@ -17,7 +20,20 @@ const newSeed = () => Math.floor(Math.random() * 4294967296);
 const HOME_URL = 'https://bitbat123.github.io/';
 
 export default function App() {
-  const [state, dispatch] = useReducer(gameReducer, null);
+  // 单机：本地 reducer 结算；联机：只发送意图，状态来自服务端广播
+  const [localState, dispatch] = useReducer(gameReducer, null);
+  const net = useRoom();
+  const state = net.online ? net.players[net.you]?.state ?? null : localState;
+
+  /** 统一入口：联机时去掉 seed 后把意图发给服务端（服务端生成种子并校验），单机直接走本地 reducer */
+  const act = (action) => {
+    if (net.online) {
+      const { seed, ...intent } = action; // eslint-disable-line no-unused-vars
+      net.send(intent);
+    } else {
+      dispatch(action);
+    }
+  };
   const [tab, setTab] = useState('students'); // students | exam
   const [selectedExam, setSelectedExam] = useState(null);
   const [popupExam, setPopupExam] = useState(null); // 全屏成绩弹窗
@@ -32,15 +48,19 @@ export default function App() {
     localStorage.setItem('theme', theme.id);
   }, [themeId]);
 
-  // 开局
-  const start = ({ system, difficulty, x, nameText, fast }) => {
+  // 开局（mode: full | three | one）
+  const start = ({ system, difficulty, x, nameText, mode }) => {
     const names = parseNames(nameText, x);
-    dispatch({ type: 'START', payload: { system, difficulty, x, names, seed: newSeed(), fast } });
+    if (net.online) {
+      net.send({ type: 'START', system, difficulty, mode, x, names });
+    } else {
+      dispatch({ type: 'START', payload: { system, difficulty, mode, x, names, seed: newSeed() } });
+    }
     setTab('students');
     setSelectedExam(null);
   };
 
-  if (!state) return <SetupScreen onStart={start} />;
+  if (!state) return <SetupScreen onStart={start} net={net} />;
 
   const stats = classStats(state);
   const exam = selectedExam
@@ -52,13 +72,15 @@ export default function App() {
       <Header
         state={state}
         stats={stats}
-        onReset={() => dispatch({ type: 'RESET' })}
+        onReset={() => (net.online ? net.disconnect() : dispatch({ type: 'RESET' }))}
+        online={net.online}
         themeId={themeId}
         onThemeChange={setThemeId}
       />
 
       <main className="layout">
         <section className="col-main">
+          {net.online && <PeerPanel players={net.players} you={net.you} />}
           <div className="tabs">
             <button className={tab === 'students' ? 'tab active' : 'tab'} onClick={() => setTab('students')}>
               👥 学生看板
@@ -83,7 +105,7 @@ export default function App() {
 
           <EventLog
             state={state}
-            onDismissEvent={() => dispatch({ type: 'DISMISS_EVENT' })}
+            onDismissEvent={() => act({ type: 'DISMISS_EVENT' })}
             onShowExam={(exam) => setPopupExam(exam)}
           />
         </section>
@@ -102,18 +124,20 @@ export default function App() {
             </div>
             <button
               className="btn-primary big"
-              onClick={() => dispatch({ type: 'END_WEEK', seed: newSeed() })}
+              onClick={() => act({ type: 'END_WEEK', seed: newSeed() })}
               disabled={state.finished}
             >
               {state.finished ? '🎓 已毕业' : '⏭ 结束本周'}
             </button>
           </div>
 
+          <MoralePanel state={state} />
+
           <ActionPanel
             state={state}
-            onStudy={(payload) => dispatch({ type: 'STUDY', ...payload, seed: newSeed() })}
-            onRelief={(payload) => dispatch({ type: 'RELIEF', ...payload })}
-            onTreat={(payload) => dispatch({ type: 'TREAT', ...payload })}
+            onStudy={(payload) => act({ type: 'STUDY', ...payload, seed: newSeed() })}
+            onRelief={(payload) => act({ type: 'RELIEF', ...payload })}
+            onTreat={(payload) => act({ type: 'TREAT', ...payload })}
           />
 
         </aside>
@@ -124,7 +148,6 @@ export default function App() {
           exam={popupExam}
           onClose={() => {
             setPopupExam(null);
-            dispatch({ type: 'DISMISS_EXAM' });
           }}
         />
       )}
@@ -133,8 +156,11 @@ export default function App() {
         <div className="modal-mask">
           <div className="modal card">
             <h2>🎓 毕业典礼</h2>
-            <p>三年（或六年）的班主任生涯圆满结束！</p>
-            <button className="btn-primary" onClick={() => dispatch({ type: 'RESET' })}>重新开始</button>
+            <p>{MODES[state.mode]?.name || '本局'}结束，班主任生涯圆满落幕！</p>
+            <p className="muted small">成就 {(state.achievements || []).length} 项 · 班费余额 ¥{state.budget.toLocaleString()}</p>
+            <button className="btn-primary" onClick={() => (net.online ? net.disconnect() : dispatch({ type: 'RESET' }))}>
+              {net.online ? '离开房间' : '重新开始'}
+            </button>
           </div>
         </div>
       )}
@@ -192,7 +218,7 @@ function ExamPopup({ exam, onClose }) {
 }
 
 /* ---------------- 顶部看板 ---------------- */
-function Header({ state, stats, onReset, themeId, onThemeChange }) {
+function Header({ state, stats, onReset, themeId, onThemeChange, online }) {
   const avgColor = GRADE_COLORS[stats.avgGrade];
   const pColor = stats.avgPressure > 100 ? '#ef4444' : stats.avgPressure > 50 ? '#f59e0b' : '#22c55e';
   return (
@@ -202,7 +228,7 @@ function Header({ state, stats, onReset, themeId, onThemeChange }) {
         <div>
           <h1>班主任模拟器</h1>
           <small>
-            {SYSTEMS[state.system].name} · {DIFFICULTY[state.difficulty].name} · {state.x} 人{state.fast ? ' · ⚡快速模式' : ''}
+            {SYSTEMS[state.system].name} · {MODES[state.mode]?.name || '完整模式'} · {DIFFICULTY[state.difficulty].name} · {state.x} 人{online ? ' · 🌐联机' : ''}
           </small>
         </div>
       </div>
@@ -215,7 +241,7 @@ function Header({ state, stats, onReset, themeId, onThemeChange }) {
       </div>
       <ThemePicker themeId={themeId} onChange={onThemeChange} />
       <a className="btn-ghost home-link" href={HOME_URL}>🏠 主页</a>
-      <button className="btn-ghost" onClick={onReset}>↺ 重开</button>
+      <button className="btn-ghost" onClick={onReset}>{online ? '↺ 离开房间' : '↺ 重开'}</button>
     </header>
   );
 }

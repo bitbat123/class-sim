@@ -258,6 +258,39 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .log-go { margin-left: auto; color: var(--accent2); font-size: 11px; white-space: nowrap; }
 
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* ---------- 班级士气 / 小目标 / 成就 / 便签 ---------- */
+.morale-panel { display: flex; flex-direction: column; gap: 8px; }
+.morale-track { height: 10px; background: rgba(148, 163, 184, 0.2); border-radius: 999px; overflow: hidden; }
+.morale-fill { height: 100%; border-radius: 999px; transition: width 0.6s ease, background 0.5s; }
+.note-box { display: flex; flex-direction: column; gap: 4px; background: var(--panel-strong); border: 1px dashed var(--border); border-radius: 10px; padding: 8px 10px; font-size: 12px; }
+.note-tag { font-size: 11px; color: var(--gold); font-weight: 600; }
+.goal-list { margin: 0; padding-left: 18px; font-size: 12px; display: flex; flex-direction: column; gap: 3px; }
+.achv-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.achv { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 6px 4px; color: var(--muted); text-align: center; }
+.achv span:first-child { font-size: 18px; }
+.achv.on { color: var(--text); border-color: var(--gold); background: rgba(251, 191, 36, 0.12); }
+
+/* ---------- 联机：开局面板 / 房间状态 / 对比面板 ---------- */
+.net-box { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+.net-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.net-box input { background: var(--panel-strong); color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; }
+.net-box code { background: rgba(148, 163, 184, 0.15); padding: 1px 5px; border-radius: 5px; }
+.room-status { display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.room-players { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.room-player { display: flex; flex-direction: column; gap: 2px; background: var(--panel-strong); border: 1px solid var(--border); border-radius: 10px; padding: 8px; font-size: 12px; }
+.room-player.me { border-color: var(--accent); }
+.peer-panel { display: flex; flex-direction: column; gap: 10px; }
+.peer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.peer-card { background: var(--panel-strong); border: 1px solid var(--border); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+.peer-head { display: flex; align-items: center; gap: 6px; }
+.peer-me { font-size: 10px; background: var(--accent); color: #fff; border-radius: 999px; padding: 1px 7px; }
+.peer-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.peer-mini { background: var(--panel); border-radius: 8px; padding: 4px 6px; text-align: center; }
+.peer-mini .stat-value { font-size: 14px; }
+.log-item.clickable:hover { background: rgba(139, 92, 246, 0.18); }
+.t-goal { color: #fde68a; }
+.t-achv { color: #c4b5fd; }
 .exam-table th small { display: block; font-weight: 400; color: var(--muted); }
 .exam-table td.name { text-align: left; font-weight: 600; }
 .score { font-weight: 700; }

@@ -1,15 +1,18 @@
-// ============ 游戏核心逻辑（纯函数，无 React 依赖） ============
+// ============ 游戏核心逻辑（纯函数，无 React 依赖；前端与联机服务端共用） ============
 import {
   GRADES, MASTERY_PER_GRADE, SUBJECTS, SYSTEMS, DIFFICULTY,
   STUDY_ACTIONS, RELIEF_ACTIONS, PRESSURE, CALENDAR,
-  TRAITS, TRAIT_BY_ID, APTITUDE, LUCK, DIMINISHING, STUDY_SCALE, SICK, FAST,
+  TRAITS, TRAIT_BY_ID, APTITUDE, LUCK, DIMINISHING, STUDY_SCALE, SICK,
+  MODES, TIME_SCALE, MORALE, TEACHER_NOTES,
 } from './constants.js';
+import { GOAL_POOL, GOAL_BY_ID, ACHIEVEMENTS } from './goals.js';
 
 const SUBJECT_BY_KEY = Object.fromEntries(SUBJECTS.map((s) => [s.key, s]));
 const ALL_KEYS = SUBJECTS.map((s) => s.key);
 const CORE_KEYS = ['chinese', 'math', 'english'];
 
 export const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+export const clampMorale = (v) => clamp(v, 0, 100);
 
 /** 熟练度(0~100) → 等级索引 */
 export const gradeIndex = (mastery) =>
@@ -73,6 +76,23 @@ export function termLabel(state) {
 
 const blankMastery = () => Object.fromEntries(ALL_KEYS.map((k) => [k, 0]));
 
+/** 时长模式：未知值回退到完整模式 */
+export const resolveMode = (mode) => (MODES[mode] ? mode : 'full');
+/** 当前局的学习时长倍率（旧存档没有 mode 字段时由 migrateState 补全） */
+export const timeScaleOf = (state) => TIME_SCALE[resolveMode(state?.mode)] ?? 1;
+
+const freshSemester = () => ({ sick: 0, collapses: 0, bestExamRate: 0 });
+
+/** 抽取本学期的 2 个班级小目标（纯函数：只消耗传入的 rng） */
+export function drawGoals(rng, count = 2) {
+  const pool = [...GOAL_POOL];
+  const ids = [];
+  for (let i = 0; i < count && pool.length; i++) {
+    ids.push(pool.splice(Math.floor(rng() * pool.length), 1)[0].id);
+  }
+  return ids;
+}
+
 /** 生成一名学生：0~2 个随机特质（约 15% 无、60% 1 个、25% 2 个）+ 每科随机天赋 */
 export function makeStudent(id, name, rng) {
   const roll = rng();
@@ -103,28 +123,58 @@ export function traitMods(traits) {
   );
 }
 
-export function createGame({ system, difficulty, x, names, seed = 1, fast = false }) {
+/**
+ * 开局。mode 取 'full' | 'three' | 'one'（完整 / 三年 / 一年）。
+ * 兼容旧参数 fast=true（等同于 mode='one'）。
+ */
+export function createGame({ system, difficulty, x, names, seed = 1, mode, fast = false }) {
   const diff = DIFFICULTY[difficulty];
-  // 快速模式只保留学制的最后一年（高三），普通模式保留全部学年
+  const m = resolveMode(mode ?? (fast ? 'one' : 'full'));
+  // 时长模式只保留学制的最后 N 个学年（三年 = 高一~高三，一年 = 高三）
   const allYears = SYSTEMS[system].years;
-  const years = fast ? allYears.slice(-FAST.yearIndexFromEnd) : allYears;
+  const cnt = MODES[m].yearCount;
+  const years = cnt ? allYears.slice(-cnt) : allYears;
   const rng = mulberry32(seed);
+  const students = names.map((name, id) => makeStudent(id, name, rng));
   return {
     system,
     difficulty,
     x,
-    fast,
+    mode: m,
     years,
     totalWeeks: years.length * 2 * CALENDAR.weeksPerSemester,
     absWeek: 0,
     budget: diff.start(x),
     income: diff.income(x),
     actionsLeft: CALENDAR.actionsPerWeek,
-    students: names.map((name, id) => makeStudent(id, name, rng)),
+    students,
     exams: [],
     log: [{ w: 0, type: 'info', text: '开学啦！班费已到账，祝你好运～' }],
     event: null,
     finished: false,
+    morale: MORALE.start,
+    goals: drawGoals(rng),
+    goalResults: null,
+    semester: freshSemester(),
+    lastSemesterClean: null,
+    achievements: [],
+    note: null,
+  };
+}
+
+/** 旧版存档（只有 fast 字段、没有 mode 等新字段）补全默认值 */
+export function migrateState(s) {
+  if (!s) return s;
+  return {
+    morale: MORALE.start,
+    goals: [],
+    goalResults: null,
+    semester: freshSemester(),
+    lastSemesterClean: null,
+    achievements: [],
+    note: null,
+    ...s,
+    mode: resolveMode(s.mode ?? (s.fast ? 'one' : 'full')),
   };
 }
 
@@ -167,12 +217,18 @@ export function makeExam(students, x, title, keys, seed, week) {
   return { id: `exam-${seed}`, week, title, keys, rows, mean, schoolSize };
 }
 
-/** 崩溃判定：压力 > 250 → 所有科目归 F，压力重置为 0 */
+/** 考试对士气的影响：班级均分率高 → 加分，低 → 扣分 */
+const examMoraleDelta = (mean) =>
+  mean >= MORALE.examHighRate ? MORALE.examHigh : mean <= MORALE.examLowRate ? MORALE.examLow : 0;
+
+/** 崩溃判定：压力 > 250 → 所有科目归 F，压力重置为 0。返回本次崩溃人数 */
 function applyCollapse(students, logs, week) {
+  let count = 0;
   for (const st of students) {
     if (st.pressure > PRESSURE.collapseThreshold) {
       ALL_KEYS.forEach((k) => (st.mastery[k] = 0));
       st.pressure = 0;
+      count += 1;
       logs.push({
         w: week,
         type: 'danger',
@@ -180,6 +236,7 @@ function applyCollapse(students, logs, week) {
       });
     }
   }
+  return count;
 }
 
 const pushLog = (state, text, type = 'info') => ({
@@ -199,6 +256,7 @@ function doStudy(state, { actionId, students: ids, subjects: keys, seed }) {
   const rng = mulberry32(seed);
   const students = cloneStudents(state.students);
   const picked = new Set(ids);
+  const timeMult = timeScaleOf(state); // 时长倍率：模式越短，每次学习增幅越大
   const gains = {}; // 每人本次总增幅，用于播报「进步最快/最慢」
   for (const st of students) {
     if (!picked.has(st.id)) continue;
@@ -207,13 +265,13 @@ function doStudy(state, { actionId, students: ids, subjects: keys, seed }) {
     const sickMult = st.sickWeeks > 0 ? SICK.gainMult : 1; // 生病时学习效果减半
     let total = 0;
     for (const k of keys) {
-      // 每科独立掷骰：运气 × 学科天赋 × 特质 × 压力倍率
+      // 每科独立掷骰：运气 × 学科天赋 × 特质 × 压力倍率 × 时长倍率
       const luck = LUCK.min + rng() * (LUCK.max - LUCK.min);
       const before = st.mastery[k];
       // 收益递减：熟练度越高，本次增幅越小
       const dim = Math.max(DIMINISHING.floor, 1 - before / DIMINISHING.cap);
-      const fastMult = state.fast ? FAST.studyMult : 1; // 快速模式：学习更快
-      const delta = action.gain * STUDY_SCALE * fastMult * mult * mods.gain * st.aptitude[k] * luck * dim * sickMult;
+      const delta =
+        action.gain * STUDY_SCALE * timeMult * mult * mods.gain * st.aptitude[k] * luck * dim * sickMult;
       st.mastery[k] = clamp(before + delta, 0, 100);
       total += st.mastery[k] - before;
     }
@@ -240,19 +298,25 @@ function doStudy(state, { actionId, students: ids, subjects: keys, seed }) {
       text: `🌟 进步最快：${best.name}（+${ranked[0][1].toFixed(1)}）｜😵 进步最慢：${worst.name}（+${ranked[ranked.length - 1][1].toFixed(1)}）`,
     });
   }
-  applyCollapse(students, logs, week);
+  const collapsed = applyCollapse(students, logs, week);
+  let morale = state.morale + collapsed * MORALE.collapse;
+  const semester = { ...state.semester, collapses: state.semester.collapses + collapsed };
 
   let exams = state.exams;
   if (action.exam) {
     const exam = makeExam(students, state.x, `${action.name}（${subjNames}）`, keys, seed, week);
     exams = [...exams, exam].slice(-30);
     logs.push({ w: week, type: 'exam', text: `📊 ${exam.title} 已完成`, exam });
+    morale += examMoraleDelta(exam.mean);
+    semester.bestExamRate = Math.max(semester.bestExamRate, exam.mean);
   }
 
   return {
     ...state,
     students,
     exams,
+    semester,
+    morale: clampMorale(morale),
     budget: state.budget - cost,
     actionsLeft: state.actionsLeft - slots,
     log: [...state.log, ...logs].slice(-200),
@@ -298,6 +362,7 @@ function doRelief(state, { actionId, students: ids }) {
   return {
     ...state,
     students,
+    morale: clampMorale(state.morale + MORALE.relief),
     budget: state.budget - cost,
     actionsLeft: state.actionsLeft - slots,
     log: [
@@ -324,7 +389,7 @@ export const EVENTS = [
       const st = pickOne(healthy, rng);
       st.sickWeeks = SICK.defaultWeeks;
       st.pressure += 20;
-      return { text: `${st.name} 生病了，病程 ${SICK.defaultWeeks} 周，每周能力下降，学习效果减半（可花 ¥${SICK.cost} 看病）`, budgetDelta: 0 };
+      return { text: `${st.name} 生病了，病程 ${SICK.defaultWeeks} 周，每周能力下降，学习效果减半（可花 ¥${SICK.cost} 看病）`, budgetDelta: 0, sick: 1 };
     },
   },
   {
@@ -385,7 +450,7 @@ export const EVENTS = [
       return { text: `${st.name} 收到一封匿名鼓励信，压力 -20%`, budgetDelta: 0 };
     },
   },
-  // ---- 新增：惊喜与惊吓（概率与强度都更大） ----
+  // ---- 惊喜与惊吓（概率与强度都更大） ----
   {
     id: 'grant', icon: '🏛️', title: '教育拨款',
     run(students, rng) {
@@ -469,10 +534,13 @@ export const EVENTS = [
   },
 ];
 
-/** 偏正面的事件（用于界面配色） */
+/** 偏正面的事件（用于界面配色与士气） */
 const GOOD_EVENT_IDS = ['donation', 'award', 'sharing', 'letter', 'grant', 'lottery', 'mentor', 'prodigy'];
 
-/** 周结算：考试 → 压力衰减/退步 → 崩溃检查 → 班费收入 → 随机事件 → 进入下周 */
+/**
+ * 周结算：考试 → 压力衰减/退步 → 士气（压力/事件）→ 班费收入 → 随机事件 → 崩溃检查
+ *        → 便签 → 学期末小目标结算 → 进入下周
+ */
 function doEndWeek(state, seed) {
   if (state.finished) return state;
   const rng = mulberry32(seed);
@@ -482,6 +550,8 @@ function doEndWeek(state, seed) {
   const wt = (state.absWeek % CALENDAR.weeksPerSemester) + 1; // 学期内第几周
   const logs = [];
   let exams = state.exams;
+  let morale = state.morale;
+  const semester = { ...state.semester };
 
   // 1. 定期考试（自动触发，不花费班费）
   let spec = null;
@@ -492,6 +562,8 @@ function doEndWeek(state, seed) {
     const exam = makeExam(students, state.x, spec.title, spec.keys, subSeed(), week);
     exams = [...exams, exam].slice(-30);
     logs.push({ w: week, type: 'exam', text: `📊 ${spec.title} 已自动举行`, exam });
+    morale += examMoraleDelta(exam.mean);
+    semester.bestExamRate = Math.max(semester.bestExamRate, exam.mean);
   }
 
   // 2. 压力自然衰减 + 高压退步 + 生病持续与能力下降
@@ -507,6 +579,11 @@ function doEndWeek(state, seed) {
     }
   }
 
+  // 2b. 全班平均压力影响士气
+  const avgP = students.reduce((a, s) => a + s.pressure, 0) / (students.length || 1);
+  if (avgP > MORALE.pressureHigh) morale += MORALE.weeklyDrop;
+  else if (avgP < MORALE.pressureLow) morale += MORALE.weeklyGain;
+
   // 3. 班费收入
   let budget = state.budget + state.income;
 
@@ -518,7 +595,10 @@ function doEndWeek(state, seed) {
       const ev = pickOne(EVENTS, rng);
       const res = ev.run(students, rng);
       budget = Math.max(0, budget + res.budgetDelta);
-      events.push({ icon: ev.icon, title: ev.title, text: res.text, good: GOOD_EVENT_IDS.includes(ev.id), week });
+      const good = GOOD_EVENT_IDS.includes(ev.id);
+      semester.sick += res.sick || 0;
+      morale += good ? MORALE.goodEvent : MORALE.badEvent;
+      events.push({ icon: ev.icon, title: ev.title, text: res.text, good, week });
       logs.push({ w: week, type: 'event', text: `${ev.icon} ${ev.title}：${res.text}` });
       if (rng() >= CALENDAR.extraEventChance) break;
     }
@@ -526,12 +606,51 @@ function doEndWeek(state, seed) {
   const event = events.length ? events : null;
 
   // 5. 崩溃检查（事件/退步之后统一检查）
-  applyCollapse(students, logs, week);
+  const collapsed = applyCollapse(students, logs, week);
+  semester.collapses += collapsed;
+  morale += collapsed * MORALE.collapse;
 
-  logs.unshift({ w: week, type: 'week', text: `—— 第 ${week} 周结束，班费 +${state.income} ——` });
+  // 6. 班主任便签：按当前士气选语气，随机抽一条
+  morale = clampMorale(morale);
+  const tone = morale >= 70 ? 'high' : morale < 40 ? 'low' : 'mid';
+  const note = pickOne(TEACHER_NOTES[tone], rng);
 
+  // 7. 学期末：小目标结算（学期最后一周）
   const nextAbs = state.absWeek + 1;
   const finished = nextAbs >= state.totalWeeks;
+  let goals = state.goals;
+  let goalResults = state.goalResults;
+  let lastSemesterClean = state.lastSemesterClean;
+  if (wt === CALENDAR.weeksPerSemester) {
+    const ctx = { students, budget, semester };
+    const results = (state.goals || [])
+      .map((id) => GOAL_BY_ID[id])
+      .filter(Boolean)
+      .map((g) => ({ id: g.id, name: g.name, done: !!g.check(ctx), reward: g.reward }));
+    for (const r of results) {
+      if (r.done) {
+        budget += r.reward.budget || 0;
+        morale += r.reward.morale || 0;
+        logs.push({
+          w: week, type: 'goal',
+          text: `🎯 小目标达成「${r.name}」${r.reward.budget ? `，班费 +${r.reward.budget}` : ''}${r.reward.morale ? `，士气 +${r.reward.morale}` : ''}`,
+        });
+      } else {
+        morale += MORALE.goalFail;
+        logs.push({ w: week, type: 'warn', text: `🎯 小目标未达成「${r.name}」，士气 ${MORALE.goalFail}` });
+      }
+    }
+    if (results.length) {
+      const doneCount = results.filter((r) => r.done).length;
+      logs.push({ w: week, type: 'goal', text: `🎯 本学期小目标：达成 ${doneCount}/${results.length}` });
+    }
+    goalResults = results.map(({ id, name, done }) => ({ id, name, done }));
+    lastSemesterClean = semester.sick === 0;
+    Object.assign(semester, freshSemester());
+    goals = finished ? goals : drawGoals(rng);
+  }
+
+  logs.unshift({ w: week, type: 'week', text: `—— 第 ${week} 周结束，班费 +${state.income} ——` });
   if (finished) logs.push({ w: week, type: 'info', text: '🎓 全部学年已结束，毕业啦！' });
 
   return {
@@ -543,33 +662,118 @@ function doEndWeek(state, seed) {
     actionsLeft: CALENDAR.actionsPerWeek,
     event,
     finished,
+    morale: clampMorale(morale),
+    note,
+    goals,
+    goalResults,
+    semester,
+    lastSemesterClean,
     log: [...state.log, ...logs].slice(-200),
   };
 }
 
-/** 统一 reducer：action 中的 seed 由调用方提供，保证 reducer 纯净 */
+/** 成就判定：每次状态变化后检查，已解锁的不重复解锁；解锁即加士气 */
+export function unlockAchievements(state) {
+  const have = new Set(state.achievements || []);
+  const fresh = ACHIEVEMENTS.filter((a) => !have.has(a.id) && a.check(state));
+  if (!fresh.length) return state;
+  return {
+    ...state,
+    achievements: [...have, ...fresh.map((a) => a.id)],
+    morale: clampMorale(state.morale + fresh.length * MORALE.achievement),
+    log: [
+      ...state.log,
+      ...fresh.map((a) => ({ w: Math.max(1, state.absWeek), type: 'achv', text: `🏅 解锁成就「${a.name}」：${a.desc}` })),
+    ].slice(-200),
+  };
+}
+
+/** 统一 reducer：所有随机种子由调用方（前端或服务端）通过 action.seed / payload.seed 提供 */
 export function gameReducer(state, action) {
+  if (action.type === 'START') return createGame(action.payload);
+  if (action.type === 'RESET') return null;
+  if (action.type === 'DISMISS_EXAM') return state; // 考试弹窗是纯界面状态
+  const cur = state && state.mode === undefined ? migrateState(state) : state;
+  if (!cur) return cur;
   switch (action.type) {
-    case 'START':
-      return createGame(action.payload);
     case 'STUDY':
-      return state ? doStudy(state, action) : state;
+      return unlockAchievements(doStudy(cur, action));
     case 'RELIEF':
-      return state ? doRelief(state, action) : state;
+      return unlockAchievements(doRelief(cur, action));
     case 'TREAT':
-      return state ? doTreat(state, action) : state;
+      return unlockAchievements(doTreat(cur, action));
     case 'END_WEEK':
-      return state ? doEndWeek(state, action.seed) : state;
+      return unlockAchievements(doEndWeek(cur, action.seed));
     case 'DISMISS_EVENT':
-      return state ? { ...state, event: null } : state;
-    case 'DISMISS_EXAM':
-      // 考试弹窗是纯界面状态，由 App 管理，这里不改动游戏状态
-      return state;
-    case 'RESET':
-      return null;
+      return { ...cur, event: null };
     default:
-      return state;
+      return cur;
   }
+}
+
+const INTENT_TYPES = ['START', 'STUDY', 'RELIEF', 'TREAT', 'END_WEEK', 'DISMISS_EVENT', 'RESET'];
+
+/**
+ * 校验客户端意图（联机服务端使用）。返回 null 表示合法，否则返回中文错误原因。
+ * 只检查参数是否合法、资源是否足够；真正的结算仍由 gameReducer 完成。
+ */
+export function validateIntent(state, intent) {
+  if (!intent || typeof intent !== 'object') return '无效的操作';
+  const { type } = intent;
+  if (!INTENT_TYPES.includes(type)) return `未知操作：${type}`;
+  if (type === 'START') {
+    if (state) return '游戏已经开始，请先重开';
+    if (!SYSTEMS[intent.system]) return '学制无效';
+    if (!DIFFICULTY[intent.difficulty]) return '难度无效';
+    if (!MODES[intent.mode]) return '时长模式无效';
+    if (!Number.isInteger(intent.x) || intent.x < 1 || intent.x > 200) return '学生人数须为 1~200 的整数';
+    if (
+      !Array.isArray(intent.names) ||
+      intent.names.length !== intent.x ||
+      intent.names.some((n) => typeof n !== 'string' || !n.trim() || n.length > 20)
+    ) return '学生姓名无效';
+    return null;
+  }
+  if (type === 'RESET') return null;
+  if (!state) return '还没有开始游戏';
+  if (type === 'DISMISS_EVENT') return null;
+  if (state.finished) return '已经毕业，无法继续操作';
+  if (type === 'END_WEEK') return null;
+
+  const ids = new Set(state.students.map((s) => s.id));
+  const validIds = (arr) => Array.isArray(arr) && arr.length > 0 && arr.every((id) => ids.has(id));
+
+  if (type === 'STUDY') {
+    const action = STUDY_ACTIONS.find((a) => a.id === intent.actionId);
+    if (!action) return '学习行动无效';
+    if (!validIds(intent.students)) return '请选择有效的学生';
+    if (!Array.isArray(intent.subjects) || !intent.subjects.length || intent.subjects.some((k) => !ALL_KEYS.includes(k))) {
+      return '请选择有效的科目';
+    }
+    if (state.actionsLeft < (action.slots || 1)) return '本周行动次数不足';
+    const cost = studyCost(action, intent.students.length, intent.subjects.length);
+    if (cost > state.budget) return `班费不足：需要 ${cost}，余额 ${state.budget}`;
+    return null;
+  }
+  if (type === 'RELIEF') {
+    const action = RELIEF_ACTIONS.find((a) => a.id === intent.actionId);
+    if (!action) return '减压行动无效';
+    if (!validIds(intent.students)) return '请选择有效的学生';
+    if (state.actionsLeft < (action.slots || 1)) return '本周行动次数不足';
+    const cost = reliefCost(action, intent.students.length);
+    if (cost > state.budget) return `班费不足：需要 ${cost}，余额 ${state.budget}`;
+    return null;
+  }
+  if (type === 'TREAT') {
+    if (!validIds(intent.students)) return '请选择有效的学生';
+    const sickSelected = state.students.some((s) => intent.students.includes(s.id) && s.sickWeeks > 0);
+    if (!sickSelected) return '选中的学生中没有病号';
+    if (state.actionsLeft < 1) return '本周行动次数不足';
+    const cost = SICK.cost * state.students.filter((s) => intent.students.includes(s.id) && s.sickWeeks > 0).length;
+    if (cost > state.budget) return `班费不足：看病需要 ${cost}，余额 ${state.budget}`;
+    return null;
+  }
+  return '无法处理的操作';
 }
 
 /* 统计工具 */
