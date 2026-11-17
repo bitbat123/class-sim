@@ -48,13 +48,13 @@ jobs:
         working-directory: 炸弹人大赛
         run: npm run web:build
 
-      # 把炸弹人的产物放进游戏站的子路径，一起发布
+      # 这个仓库发布在 https://bitbat123.github.io/class-sim/，
+      # 所以产物根目录就是 /class-sim/ 本身；炸弹人放到它下面的 bomb-contest/。
       - name: Assemble site
         run: |
-          mkdir -p site/class-sim
-          cp -r 班主任模拟器/dist/. site/class-sim/
-          mkdir -p site/class-sim/bomb-contest
-          cp -r 炸弹人大赛/dist/. site/class-sim/bomb-contest/
+          mkdir -p site/bomb-contest
+          cp -r 班主任模拟器/dist/. site/
+          cp -r 炸弹人大赛/dist/. site/bomb-contest/
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
