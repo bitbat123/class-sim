@@ -54,37 +54,110 @@ export const DIFF_TABLE = [
   ['全局变量', '支持', '支持（跨调用保留状态）', '可用来缓存地图等'],
 ];
 
-/** 文档面板：与原生 C++ 的差异对照表 + 本游戏 API 全表 */
+/**
+ * 文档抽屉：默认折叠，右下角悬浮按钮打开，点遮罩或 × 关闭。
+ * 内容 = 与原生 C++ 的 50 项差异 + 本游戏全部 API。
+ */
 export default function DocsPanel({ api }) {
-  const [tab, setTab] = useState('diff');
-  return (
-    <div className="docs-panel">
-      <div className="docs-tabs">
-        <button className={tab === 'diff' ? 'on' : ''} onClick={() => setTab('diff')}>
-          ⚠️ 与原生 C++ 的差异（{DIFF_TABLE.length} 项）
-        </button>
-        <button className={tab === 'api' ? 'on' : ''} onClick={() => setTab('api')}>
-          📖 {api.ns} 全部变量与函数
-        </button>
-      </div>
+  const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState('api');
 
-      {tab === 'diff' ? (
-        <div className="docs-body">
-          <p className="muted small">
-            本游戏使用自研的类 C++ 解释器，不是真正的 C++ 编译器。下表是**全部**差异，未列出的特性一律不支持。
-          </p>
-          <table className="docs-table">
-            <thead>
-              <tr><th>项目</th><th>原生 C++</th><th>本方言</th><th>说明</th></tr>
-            </thead>
-            <tbody>
-              {DIFF_TABLE.map(([item, cpp, ours, note], i) => (
-                <tr key={i}><td>{item}</td><td>{cpp}</td><td className="ours">{ours}</td><td className="muted">{note}</td></tr>
-              ))}
-            </tbody>
-          </table>
-          <h4>支持的语言子集</h4>
-          <pre className="subset">{`类型：      int  bool  pair  void
+  return (
+    <>
+      {/* 折叠状态：右下角悬浮按钮（明显的打开提示） */}
+      {!open && (
+        <button className="docs-fab" onClick={() => setOpen(true)} title="查看语言说明与本游戏全部变量">
+          <span className="docs-fab-icon">📘</span>
+          <span className="docs-fab-text">语言说明 / API</span>
+          <span className="docs-fab-badge">{DIFF_TABLE.length + api.writable.length + api.readonly.length + api.funcs.length}</span>
+        </button>
+      )}
+
+      {open && (
+        <div className="docs-drawer-mask" onClick={() => setOpen(false)}>
+          <aside className="docs-drawer" onClick={(e) => e.stopPropagation()}>
+            <header className="docs-drawer-head">
+              <h3>📘 语言说明与 {api.ns}:: API</h3>
+              <button className="docs-close" onClick={() => setOpen(false)} aria-label="关闭">×</button>
+            </header>
+
+            <div className="docs-tabs">
+              <button className={tab === 'api' ? 'on' : ''} onClick={() => setTab('api')}>
+                {api.ns}:: 变量与函数
+              </button>
+              <button className={tab === 'diff' ? 'on' : ''} onClick={() => setTab('diff')}>
+                与原生 C++ 的差异（{DIFF_TABLE.length} 项）
+              </button>
+            </div>
+
+            <div className="docs-drawer-body">
+              {tab === 'api' ? (
+                <div className="docs-body">
+                  <p className="muted small">
+                    头文件 <code>#include&lt;{api.header}&gt;</code>，命名空间 <code>{api.ns}::</code>，
+                    入口 <code>void main()</code>，{api.freq}。
+                  </p>
+
+                  <h4>✅ 可写变量（只有这些）</h4>
+                  <table className="docs-table">
+                    <thead><tr><th>变量</th><th>类型</th><th>范围</th><th>说明</th></tr></thead>
+                    <tbody>
+                      {api.writable.map(([n, t, r, d], i) => (
+                        <tr key={i}><td><code>{api.ns}::{n}</code></td><td>{t}</td><td>{r}</td><td>{d}</td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  <h4>📖 只读变量</h4>
+                  <table className="docs-table">
+                    <thead><tr><th>变量</th><th>类型</th><th>说明</th></tr></thead>
+                    <tbody>
+                      {api.readonly.map(([n, t, d], i) => (
+                        <tr key={i}><td><code>{api.ns}::{n}</code></td><td>{t}</td><td>{d}</td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  <h4>🔧 只读函数</h4>
+                  <table className="docs-table">
+                    <thead><tr><th>函数</th><th>返回</th><th>说明</th></tr></thead>
+                    <tbody>
+                      {api.funcs.map(([sig, ret, d], i) => (
+                        <tr key={i}><td><code>{api.ns}::{sig}</code></td><td>{ret}</td><td>{d}</td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  <h4>❌ 常见错误</h4>
+                  <table className="docs-table">
+                    <thead><tr><th>写法</th><th>结果</th></tr></thead>
+                    <tbody>
+                      {api.errors.map(([w, r], i) => (
+                        <tr key={i}><td><code>{w}</code></td><td>{r}</td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  <h4>规则要点</h4>
+                  <ul className="rules-ul">{api.rules.map((r, i) => <li key={i}>{r}</li>)}</ul>
+                </div>
+              ) : (
+                <div className="docs-body">
+                  <p className="muted small">
+                    本游戏使用自研的类 C++ 解释器，不是真正的 C++ 编译器。下表是全部差异，未列出的特性一律不支持。
+                  </p>
+                  <table className="docs-table">
+                    <thead>
+                      <tr><th>项目</th><th>原生 C++</th><th>本方言</th><th>说明</th></tr>
+                    </thead>
+                    <tbody>
+                      {DIFF_TABLE.map(([item, cpp, ours, note], i) => (
+                        <tr key={i}><td>{item}</td><td>{cpp}</td><td className="ours">{ours}</td><td className="muted">{note}</td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <h4>支持的语言子集</h4>
+                  <pre className="subset">{`类型：      int  bool  pair  void
 字面量：    非负整数   true   false   pair(a, b)
 运算符：    + - * / %    < <= > >= == !=    && || !    ++ --    = += -= *= /= %=
 语句：      if / else    while    for (;;)    return    break    continue    { }
@@ -92,58 +165,12 @@ export default function DocsPanel({ api }) {
 访问：      变量   命名空间::变量    arr[i]    p.first    p.second    arr.size()
 注释：      // 行注释    /* 块注释 */
 预处理：    #include<${api.header}>`}</pre>
-        </div>
-      ) : (
-        <div className="docs-body">
-          <p className="muted small">
-            头文件 <code>#include&lt;{api.header}&gt;</code>，命名空间 <code>{api.ns}::</code>，
-            入口 <code>void main()</code>，{api.freq}。
-          </p>
-
-          <h4>✅ 可写变量（只有这些）</h4>
-          <table className="docs-table">
-            <thead><tr><th>变量</th><th>类型</th><th>范围</th><th>说明</th></tr></thead>
-            <tbody>
-              {api.writable.map(([n, t, r, d], i) => (
-                <tr key={i}><td><code>{api.ns}::{n}</code></td><td>{t}</td><td>{r}</td><td>{d}</td></tr>
-              ))}
-            </tbody>
-          </table>
-
-          <h4>📖 只读变量</h4>
-          <table className="docs-table">
-            <thead><tr><th>变量</th><th>类型</th><th>说明</th></tr></thead>
-            <tbody>
-              {api.readonly.map(([n, t, d], i) => (
-                <tr key={i}><td><code>{api.ns}::{n}</code></td><td>{t}</td><td>{d}</td></tr>
-              ))}
-            </tbody>
-          </table>
-
-          <h4>🔧 只读函数</h4>
-          <table className="docs-table">
-            <thead><tr><th>函数</th><th>返回</th><th>说明</th></tr></thead>
-            <tbody>
-              {api.funcs.map(([sig, ret, d], i) => (
-                <tr key={i}><td><code>{api.ns}::{sig}</code></td><td>{ret}</td><td>{d}</td></tr>
-              ))}
-            </tbody>
-          </table>
-
-          <h4>❌ 常见错误</h4>
-          <table className="docs-table">
-            <thead><tr><th>写法</th><th>结果</th></tr></thead>
-            <tbody>
-              {api.errors.map(([w, r], i) => (
-                <tr key={i}><td><code>{w}</code></td><td>{r}</td></tr>
-              ))}
-            </tbody>
-          </table>
-
-          <h4>规则要点</h4>
-          <ul className="rules-ul">{api.rules.map((r, i) => <li key={i}>{r}</li>)}</ul>
+                </div>
+              )}
+            </div>
+          </aside>
         </div>
       )}
-    </div>
+    </>
   );
 }
