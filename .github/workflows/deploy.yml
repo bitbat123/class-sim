@@ -1,4 +1,4 @@
-name: Deploy game to GitHub Pages
+name: Deploy games to GitHub Pages
 
 on:
   push:
@@ -29,6 +29,8 @@ jobs:
           cache-dependency-path: |
             班主任模拟器/package-lock.json
             炸弹人大赛/package-lock.json
+            五子棋/package-lock.json
+            赛车/package-lock.json
 
       # ---- 班主任模拟器 ----
       - name: Install (class-teacher)
@@ -48,13 +50,32 @@ jobs:
         working-directory: 炸弹人大赛
         run: npm run web:build
 
-      # 这个仓库发布在 https://bitbat123.github.io/class-sim/，
-      # 所以产物根目录就是 /class-sim/ 本身；炸弹人放到它下面的 bomb-contest/。
+      # ---- 五子棋 ----
+      - name: Install (gomoku)
+        working-directory: 五子棋
+        run: npm ci
+
+      - name: Build (gomoku)
+        working-directory: 五子棋
+        run: npm run web:build
+
+      # ---- 赛车 ----
+      - name: Install (racing)
+        working-directory: 赛车
+        run: npm ci
+
+      - name: Build (racing)
+        working-directory: 赛车
+        run: npm run web:build
+
+      # 这个仓库发布在 /class-sim/，所以产物根目录就是它本身
       - name: Assemble site
         run: |
-          mkdir -p site/bomb-contest
+          mkdir -p site/bomb-contest site/gomoku site/racing
           cp -r 班主任模拟器/dist/. site/
           cp -r 炸弹人大赛/dist/. site/bomb-contest/
+          cp -r 五子棋/dist/. site/gomoku/
+          cp -r 赛车/dist/. site/racing/
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

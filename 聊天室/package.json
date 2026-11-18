@@ -1,0 +1,12 @@
+{
+  "name": "chat-room",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Shared real-time chat room (React + Vite web, Node ws server)",
+  "scripts": {
+    "server": "node server/index.js",
+    "web:dev": "npm --prefix web run dev",
+    "web:build": "npm --prefix web run build",
+    "test": "node scripts/test-chat.mjs"
+  }
+}
