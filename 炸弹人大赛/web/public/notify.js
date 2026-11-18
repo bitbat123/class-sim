@@ -34,10 +34,48 @@
       '#dsh-chat-dot[hidden]{display:none}',
       '#dsh-chat-btn.has-unread{animation:dshPulse 1.6s ease-in-out infinite}',
       '@keyframes dshPulse{0%,100%{box-shadow:0 6px 20px rgba(6,182,212,.45)}50%{box-shadow:0 6px 28px rgba(239,68,68,.8)}}',
+      '#dsh-chat-banner{position:fixed;top:0;left:0;right:0;z-index:2147483001;display:flex;align-items:center;justify-content:center;gap:10px;',
+      "padding:10px 18px;background:linear-gradient(90deg,#7c3aed,#0ea5e9);color:#fff;font:600 14px/1.4 'Segoe UI','Microsoft YaHei',system-ui,sans-serif;",
+      'cursor:pointer;box-shadow:0 4px 18px rgba(0,0,0,.45);transform:translateY(-100%);transition:transform .28s ease}',
+      '#dsh-chat-banner.show{transform:none}',
+      '#dsh-chat-banner .dsh-badge{background:#ef4444;color:#fff;border-radius:999px;padding:2px 9px;font-size:12px}',
+      '#dsh-chat-banner .dsh-x{background:transparent;border:none;color:#fff;opacity:.8;font-size:18px;cursor:pointer;line-height:1}',
     ].join('');
     document.head.appendChild(st);
   }
 
+
+  // ---------- 顶部横幅：收到新消息时从上方滑下 ----------
+  let bannerTimer = null;
+
+  function ensureBanner() {
+    let el = document.getElementById('dsh-chat-banner');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'dsh-chat-banner';
+      el.innerHTML = '<span>💬 聊天室有新消息</span><span class="dsh-badge">0</span><button class="dsh-x" aria-label="关闭">×</button>';
+      el.querySelector('.dsh-x').addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        el.classList.remove('show');
+      });
+      el.addEventListener('click', () => {
+        window.open(CHAT_URL, '_blank', 'noopener');
+        setUnread(0);
+        el.classList.remove('show');
+      });
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+
+  function showBanner(count, preview) {
+    const el = ensureBanner();
+    el.querySelector('span').textContent = preview ? ('💬 ' + preview) : '💬 聊天室有新消息';
+    el.querySelector('.dsh-badge').textContent = count > 99 ? '99+' : String(count);
+    el.classList.add('show');
+    if (bannerTimer) clearTimeout(bannerTimer);
+    bannerTimer = setTimeout(() => el.classList.remove('show'), 8000);
+  }
   function button() {
     let el = document.getElementById('dsh-chat-btn');
     if (!el) {
@@ -104,8 +142,13 @@
         const last = list[list.length - 1];
         lastId = Math.max(lastId, Number(last.id) || 0);
         sessionStorage.setItem(LAST_KEY, String(lastId));
-        const incoming = list.filter((m) => m.sender !== username).length;
-        if (incoming > 0) setUnread(unread + incoming);
+        const incoming = list.filter((m) => m.sender !== username);
+        if (incoming.length > 0) {
+          setUnread(unread + incoming.length);
+          const lastMsg = incoming[incoming.length - 1];
+          const preview = lastMsg.sender + '：' + String(lastMsg.body || '').replace(/\s+/g, ' ').slice(0, 30);
+          showBanner(unread, preview);
+        }
       }
     } catch { /* 静默失败，下次再试 */ }
     running = false;
