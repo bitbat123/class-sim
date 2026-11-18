@@ -169,6 +169,12 @@
       return;
     }
     btn.style.display = 'flex';
+    // 游戏页右下角已有「语言说明 / API」浮钮，聊天按钮上移避免重叠
+    try {
+      if (document.querySelector('.docs-fab')) {
+        btn.style.bottom = '84px';
+      }
+    } catch (e) { /* 忽略 */ }
     poll();
     timer = setInterval(poll, POLL_MS);
   }
