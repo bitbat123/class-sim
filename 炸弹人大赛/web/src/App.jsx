@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { STARTERS, DEFAULT_CODE } from './starters.js';
 import { BASELINES } from '@shared/baselines.js';
 import { runLocalMatch, SPEED_MS } from './localMatch.js';
-import { checkCode } from '@shared/interp.js';
+import { checkCode } from '@shared/game.js';
 import CodeEditor from './components/CodeEditor.jsx';
 import Board from './components/Board.jsx';
 import OnlineMode from './components/OnlineMode.jsx';
@@ -18,6 +18,7 @@ export default function App() {
   const [playback, setPlayback] = useState(null);
   const [cursor, setCursor] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState(SPEED_MS);
 
   // 语法检查（防抖，避免每次按键都解析一遍）
   useEffect(() => {
@@ -36,9 +37,9 @@ export default function App() {
         }
         return c + 1;
       });
-    }, SPEED_MS);
+    }, speed);
     return () => clearTimeout(t);
-  }, [playing, playback, cursor]);
+  }, [playing, playback, cursor, speed]);
 
   const startLocal = () => {
     const res = runLocalMatch(code, BASELINES[opponent].src, mapIndex);
@@ -132,8 +133,15 @@ export default function App() {
 
           {playback && (
             <div className="playback-bar">
-              <button className="btn-small" onClick={() => setCursor(0)}>⏮</button>
+              <button className="btn-small" onClick={() => { setCursor(0); setPlaying(true); }}>⏮</button>
               <button className="btn-small" onClick={() => setPlaying((p) => !p)}>{playing ? '⏸ 暂停' : '▶ 播放'}</button>
+              <select value={speed} onChange={(e) => setSpeed(Number(e.target.value))} aria-label="播放速度">
+                <option value={400}>0.15×</option>
+                <option value={200}>0.3×</option>
+                <option value={100}>0.6×</option>
+                <option value={60}>1×</option>
+                <option value={25}>2.5×</option>
+              </select>
               <input
                 type="range"
                 min={0}
@@ -160,6 +168,21 @@ export default function App() {
               {frame?.errors?.player1 && <div className="log-item err">我：{frame.errors.player1.error}</div>}
               {frame?.errors?.player2 && <div className="log-item err">对手：{frame.errors.player2.error}</div>}
               {!frame && <div className="muted small">还没有开始对战。</div>}
+            </div>
+          </div>
+
+          <div className="console-box">
+            <h3>🖥 控制台（cout）</h3>
+            <div className="console-list">
+              {(frame?.console?.player1 || []).length === 0 && (frame?.console?.player2 || []).length === 0 && (
+                <div className="muted small">没有输出。用 cout &lt;&lt; "..." &lt;&lt; endl; 打印调试信息。</div>
+              )}
+              {(frame?.console?.player1 || []).map((line, i) => (
+                <div key={`me-${i}`} className="console-line"><span className="console-tag me">我</span>{line}</div>
+              ))}
+              {(frame?.console?.player2 || []).map((line, i) => (
+                <div key={`op-${i}`} className="console-line"><span className="console-tag op">对手</span>{line}</div>
+              ))}
             </div>
           </div>
         </section>

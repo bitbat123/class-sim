@@ -201,16 +201,22 @@ export function stepRace(race) {
 
 export function runFrame(race, id, interp) {
   const car = race.cars[id];
-  if (!interp || car.finished) return { ok: true };
+  car.console = [];
+  if (!interp || car.finished) return { ok: true, console: car.console };
   car.throttleInput = 0;
   car.steerInput = 0;
   try {
-    interp.runMain(makeHost(race, id));
-    return { ok: true };
+    // 捕获 cout 输出，供前端控制台面板显示
+    const host = makeHost(race, id);
+    host.console = (line) => {
+      if (car.console.length < 60) car.console.push(line);
+    };
+    interp.runMain(host);
+    return { ok: true, console: car.console };
   } catch (e) {
     car.throttleInput = 0;
     car.steerInput = 0;
-    return { ok: false, error: e.message, line: e.line };
+    return { ok: false, console: car.console, error: e.message, line: e.line };
   }
 }
 

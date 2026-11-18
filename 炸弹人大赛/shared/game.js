@@ -1,13 +1,17 @@
 // 炸弹人游戏规则（纯逻辑，无 DOM）。服务端与浏览器共用，保证结果一致。
-import { Interpreter, Pair, parse, BombError, TimeLimitError } from './interp.js';
+import { createDialect } from './dialect.js';
 import { MAPS } from './maps.js';
+
+export const bombDialect = createDialect({ namespace: 'bomb', header: 'bomb.h', label: '炸弹人方言' });
+export const { Interpreter, Pair, parse, checkCode, DialectError: BombError, TimeLimitError } = bombDialect;
 
 export const DIRS = { 0: [0, -1], 1: [1, 0], 2: [0, 1], 3: [-1, 0] }; // 上右下左
 export const DIR_NAMES = ['上', '右', '下', '左'];
 export const BOMB_RANGE = 2;     // 炸弹向四个方向炸开的格数
 export const BOMB_FUSE = 3;      // 放下后几回合爆炸
 export const BOMB_COOLDOWN = 1;  // 放完炸弹后至少间隔的回合
-export const ENEMY_MOVE_EVERY = 2;   // 敌人每 2 回合动一次
+export const ENEMY_MOVE_EVERY = 3;   // 敌人每 3 回合动一次（放慢节奏）
+export const ENEMY_CHASE_RANGE = 6;  // 敌人只在这个距离内追击（避免开局秒杀）
 // 赛制（与比赛规则一致）：
 // - 编写代码阶段 20 分钟（由服务端计时，不在这里）；
 // - 每局：先死者输；超过 ROUND_SECONDS 未结束，放炸弹少的一方赢；
@@ -118,6 +122,8 @@ export function step(m) {
       if (!e.alive) continue;
       const target = nearestAlive(m, e);
       if (!target) continue;
+      // 距离太远就不追，给玩家喘息空间
+      if (manhattan(e, target) > ENEMY_CHASE_RANGE) continue;
       const options = [[0, -1], [1, 0], [0, 1], [-1, 0]]
         .map(([dx, dy]) => ({ x: e.x + dx, y: e.y + dy }))
         .filter((c) => !wall(m, c.x, c.y) && !bombAt(m, c.x, c.y))
@@ -330,16 +336,23 @@ export function runScriptFrame(m, playerId, interp) {
   p.lastError = null;
   p.dirChoice = -1;
   p.bombRequest = false;
-  if (!p.alive || !interp) return { ok: true };
+  p.console = [];
+  if (!p.alive || !interp) return { ok: true, console: p.console };
   try {
-    interp.runMain(makeHost(m, playerId));
-    return { ok: true };
+    // 捕获 cout 输出，供前端控制台面板显示
+    const host = makeHost(m, playerId);
+    host.console = (line) => {
+      if (p.console.length < 60) p.console.push(line);
+    };
+    interp.runMain(host);
+    return { ok: true, console: p.console };
   } catch (e) {
     p.dirChoice = -1;
     p.bombRequest = false;
-    if (e instanceof TimeLimitError) return { ok: false, timeout: true, error: e.message, line: e.line };
-    if (e instanceof BombError) return { ok: false, error: e.message, line: e.line };
-    return { ok: false, error: '内部错误：' + (e && e.message) };
+    const consoleOut = p.console;
+    if (e instanceof TimeLimitError) return { ok: false, console: consoleOut, timeout: true, error: e.message, line: e.line };
+    if (e instanceof BombError) return { ok: false, console: consoleOut, error: e.message, line: e.line };
+    return { ok: false, console: consoleOut, error: '内部错误：' + (e && e.message) };
   }
 }
 
@@ -348,4 +361,3 @@ export function loadScript(src) {
   return new Interpreter(ast);
 }
 
-export { Pair, parse, BombError, TimeLimitError };

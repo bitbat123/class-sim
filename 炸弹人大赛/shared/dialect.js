@@ -1,5 +1,7 @@
 // 通用「类 C++」方言解释器（炸弹人 / 五子棋 / 赛车共用）。
-// 不是真正的 C++ 编译器：没有标准库、字符串、指针。
+// 支持：int/long/short/char/unsigned 等整数类型、bool、pair、局部数组、
+//      if/else、while、do-while、for、switch/case/default、break/continue/return、
+//      const、#define、三元运算符、位运算、字符串字面量、cout 调试输出。
 // 通过工厂参数化命名空间与头文件，例如 { namespace: 'bomb', header: 'bomb.h' }。
 
 export class DialectError extends Error {
@@ -20,6 +22,8 @@ export class TimeLimitError extends DialectError {
 export const TIME_LIMIT_MS = 50;
 const STEP_LIMIT = 200000;
 const RECURSION_LIMIT = 100;
+const MAX_STRING = 500;
+const MAX_CONSOLE_LINES = 200;
 
 const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
@@ -30,19 +34,28 @@ export class Pair {
   }
 }
 
-const KEYWORDS = new Set(['int', 'bool', 'void', 'pair', 'if', 'else', 'while', 'for', 'return', 'break', 'continue', 'true', 'false']);
-const TYPES = new Set(['int', 'bool', 'void', 'pair']);
-const OPS2 = ['<=', '>=', '==', '!=', '&&', '||', '+=', '-=', '*=', '/=', '%=', '++', '--'];
-const OPS1 = '+-*/%<>=!(){}[];,.';
+/** 整数类型别名：最终都按 int 处理 */
+const INT_TYPES = new Set(['int', 'long', 'short', 'char', 'unsigned', 'signed', 'size_t', 'long long']);
+const TYPES = new Set(['int', 'bool', 'void', 'pair', 'string']);
+const KEYWORDS = new Set([
+  'int', 'bool', 'void', 'pair', 'string', 'long', 'short', 'char', 'unsigned', 'signed', 'size_t',
+  'if', 'else', 'while', 'do', 'for', 'switch', 'case', 'default',
+  'break', 'continue', 'return', 'const', 'true', 'false', 'cout', 'endl',
+]);
+const OPS2 = ['<=', '>=', '==', '!=', '&&', '||', '+=', '-=', '*=', '/=', '%=', '<<', '>>', '++', '--'];
+const OPS1 = '+-*/%<>=!(){}[];,.&|^~?:';
 const ASSIGN_OPS = ['=', '+=', '-=', '*=', '/=', '%='];
 
-/** 创建一个方言：返回 { lex, parse, checkCode, Interpreter, Pair, DialectError, TimeLimitError } */
-export function createDialect({ namespace, header, timeLimitMs = TIME_LIMIT_MS, label = '炸弹人方言' }) {
+/** 把类型名归一化：long/short/char/unsigned → int */
+const normType = (t) => (INT_TYPES.has(t) ? 'int' : (t === 'string' ? 'string' : t));
+
+/** 创建方言 */
+export function createDialect({ namespace, header, timeLimitMs = TIME_LIMIT_MS, label = '方言' }) {
   const NS = namespace;
-  const HEADER = header;
+  const HEADER_RE = new RegExp(`^#\\s*include\\s*<\\s*${header.replace('.', '\\.')}\\s*>$`);
 
   // ---------------- 词法分析 ----------------
-  function lex(src) {
+  function lex(src, defines = new Map()) {
     const toks = [];
     const n = src.length;
     let i = 0;
@@ -74,16 +87,49 @@ export function createDialect({ namespace, header, timeLimitMs = TIME_LIMIT_MS, 
         let end = src.indexOf('\n', i);
         if (end < 0) end = n;
         const directive = src.slice(i, end).trim();
-        const ok = new RegExp(`^#\\s*include\\s*<\\s*${HEADER.replace('.', '\\.')}\\s*>$`).test(directive);
-        if (ok) sawInclude = true;
-        else throw new DialectError(`只允许 #include<${HEADER}>，不要引入其他头文件（比如 iostream）`, line);
+        if (HEADER_RE.test(directive)) {
+          sawInclude = true;
+        } else if (/^#\s*define\s+\w+\s+.+$/.test(directive)) {
+          // 简单对象宏：#define NAME value
+          const m = directive.match(/^#\s*define\s+(\w+)\s+(.+)$/);
+          defines.set(m[1], m[2].trim());
+        } else if (/^#\s*define\s+\w+$/.test(directive)) {
+          const m = directive.match(/^#\s*define\s+(\w+)$/);
+          defines.set(m[1], '1');
+        } else {
+          throw new DialectError(`只允许 #include<${header}> 和 #define，不要引入其他头文件（比如 iostream）`, line);
+        }
         i = end;
         continue;
       }
+      // 字符串字面量：只允许在 cout 里做调试输出
+      if (c === '"') {
+        let j = i + 1;
+        let out = '';
+        while (j < n && src[j] !== '"') {
+          if (src[j] === '\\') {
+            const e = src[j + 1];
+            out += e === 'n' ? '\n' : e === 't' ? '\t' : e === '"' ? '"' : e === '\\' ? '\\' : e;
+            j += 2;
+            continue;
+          }
+          if (src[j] === '\n') throw new DialectError('字符串不能跨行', line);
+          out += src[j];
+          j++;
+        }
+        if (j >= n) throw new DialectError('字符串没有结束（缺少引号）', line);
+        if (out.length > MAX_STRING) throw new DialectError('字符串太长', line);
+        push('str', out);
+        i = j + 1;
+        continue;
+      }
+      if (c === "'") throw new DialectError('不支持字符字面量，请用数字（如 65 表示 A）', line);
       if (isIdStart(c)) {
         let j = i;
         while (j < n && isIdChar(src[j])) j++;
-        const word = src.slice(i, j);
+        let word = src.slice(i, j);
+        // 宏替换
+        if (defines.has(word)) word = defines.get(word);
         if (src.startsWith('::', j)) {
           if (word !== NS) throw new DialectError(`只能使用 ${NS}:: 命名空间，不支持 ${word}::`, line);
           const m = j + 2;
@@ -96,6 +142,7 @@ export function createDialect({ namespace, header, timeLimitMs = TIME_LIMIT_MS, 
           continue;
         }
         if (KEYWORDS.has(word)) push('kw', word);
+        else if (/^\d+$/.test(word)) push('num', Number(word));
         else push('id', word);
         i = j;
         continue;
@@ -110,10 +157,9 @@ export function createDialect({ namespace, header, timeLimitMs = TIME_LIMIT_MS, 
       const two = src.slice(i, i + 2);
       if (OPS2.includes(two)) { push('op', two); i += 2; continue; }
       if (OPS1.includes(c)) { push('op', c); i++; continue; }
-      if (c === '"' || c === "'") throw new DialectError('本游戏不支持字符串', line);
       throw new DialectError(`无法识别的字符 "${c}"`, line);
     }
-    if (!sawInclude) throw new DialectError(`第一行必须写 #include<${HEADER}>`, 1);
+    if (!sawInclude) throw new DialectError(`第一行必须写 #include<${header}>`, 1);
     push('eof', null);
     return toks;
   }
@@ -126,6 +172,7 @@ export function createDialect({ namespace, header, timeLimitMs = TIME_LIMIT_MS, 
     isOp(v, o = 0) { const t = this.peek(o); return t.t === 'op' && t.v === v; }
     isKw(v, o = 0) { const t = this.peek(o); return t.t === 'kw' && t.v === v; }
     accept(v) { if (this.isOp(v)) { this.p++; return true; } return false; }
+    acceptKw(v) { if (this.isKw(v)) { this.p++; return true; } return false; }
     fail(msg, tok = this.peek()) { throw new DialectError(msg, tok.line); }
     expectOp(v) {
       if (!this.isOp(v)) this.fail(`这里应该是 "${v}"`);
@@ -137,21 +184,40 @@ export function createDialect({ namespace, header, timeLimitMs = TIME_LIMIT_MS, 
       this.p++;
       return t.v;
     }
+    /** 是否是类型名起始（含 const 前缀与类型别名） */
+    atType() {
+      const t = this.peek();
+      return t.t === 'kw' && (TYPES.has(t.v) || INT_TYPES.has(t.v) || t.v === 'const');
+    }
+    readType() {
+      let isConst = false;
+      while (this.isKw('const')) { isConst = true; this.p++; }
+      let t = this.next();
+      const names = [t.v];
+      // long long / unsigned int 之类的两段类型
+      while (this.peek().t === 'kw' && (INT_TYPES.has(this.peek().v) || this.peek().v === 'int')) {
+        names.push(this.next().v);
+      }
+      const base = names[0];
+      if (!(TYPES.has(base) || INT_TYPES.has(base))) {
+        throw new DialectError(`不支持的类型 ${names.join(' ')}`, t.line);
+      }
+      return { type: normType(base), isConst };
+    }
 
     program() {
       const funcs = {};
       const globals = [];
       while (this.peek().t !== 'eof') {
-        const t = this.peek();
-        if (!(t.t === 'kw' && TYPES.has(t.v))) this.fail('这里应该是类型名：int / bool / void / pair');
-        this.p++;
+        if (!this.atType()) this.fail('这里应该是类型名：int / long / bool / void / pair / string');
+        const { type, isConst } = this.readType();
         const nameTok = this.peek();
         const name = this.ident();
         if (this.isOp('(')) {
           if (funcs[name]) this.fail(`函数 ${name} 重复定义`, nameTok);
-          funcs[name] = this.funcRest(t.v, name, nameTok.line);
+          funcs[name] = this.funcRest(type, name, nameTok.line);
         } else {
-          globals.push(this.varRest(t.v, name, nameTok.line));
+          globals.push(this.varRest(type, name, nameTok.line, isConst));
         }
       }
       if (!funcs.main) throw new DialectError('缺少 void main()：每一帧都会调用它', 1);
@@ -169,10 +235,9 @@ export function createDialect({ namespace, header, timeLimitMs = TIME_LIMIT_MS, 
           this.p++;
         } else {
           do {
-            const t = this.peek();
-            if (!(t.t === 'kw' && (t.v === 'int' || t.v === 'bool' || t.v === 'pair'))) this.fail('参数类型应该是 int / bool / pair');
-            this.p++;
-            params.push({ type: t.v, name: this.ident() });
+            const pt = this.readType();
+            if (pt.type === 'void') this.fail('参数不能是 void');
+            params.push({ type: pt.type, name: this.ident() });
           } while (this.accept(','));
         }
       }
@@ -181,12 +246,34 @@ export function createDialect({ namespace, header, timeLimitMs = TIME_LIMIT_MS, 
       return { type, name, params, body, line };
     }
 
-    varRest(type, name, line) {
+    /** 变量声明（支持 int a[10]; 与 const） */
+    varRest(type, name, line, isConst = false) {
       if (type === 'void') this.fail('变量不能是 void', { line });
+      let arraySize = null;
+      if (this.isOp('[')) {
+        this.p++;
+        const sizeExpr = this.expr();
+        this.expectOp(']');
+        arraySize = sizeExpr;
+      }
       let init = null;
       if (this.accept('=')) init = this.expr();
+      // 支持 int a = 1, b = 2, c; 这种一行多个声明
+      const decls = [{ k: 'decl', type, name, init, line, isConst, arraySize }];
+      while (this.accept(',')) {
+        const n2 = this.ident();
+        let size2 = null;
+        if (this.isOp('[')) {
+          this.p++;
+          size2 = this.expr();
+          this.expectOp(']');
+        }
+        let init2 = null;
+        if (this.accept('=')) init2 = this.expr();
+        decls.push({ k: 'decl', type, name: n2, init: init2, line, isConst, arraySize: size2 });
+      }
       this.expectOp(';');
-      return { k: 'decl', type, name, init, line };
+      return decls.length === 1 ? decls[0] : { k: 'decls', list: decls, line };
     }
 
     block() {
@@ -204,10 +291,21 @@ export function createDialect({ namespace, header, timeLimitMs = TIME_LIMIT_MS, 
       const t = this.peek();
       if (this.isOp('{')) return this.block();
       if (this.isOp(';')) { this.p++; return { k: 'block', body: [], line: t.line }; }
-      if (t.t === 'kw' && (t.v === 'int' || t.v === 'bool' || t.v === 'pair')) {
+
+      // cout << a << b << endl;
+      if (this.isKw('cout')) {
         this.p++;
+        const parts = [];
+        while (this.accept('<<')) parts.push(this.binary(9));
+        this.expectOp(';');
+        if (!parts.length) this.fail('cout 后面要写 << 表达式', t);
+        return { k: 'cout', parts, line: t.line };
+      }
+
+      if (this.atType()) {
+        const { type, isConst } = this.readType();
         const name = this.ident();
-        return this.varRest(t.v, name, t.line);
+        return this.varRest(type, name, t.line, isConst);
       }
       if (this.isKw('if')) {
         this.p++;
@@ -216,7 +314,7 @@ export function createDialect({ namespace, header, timeLimitMs = TIME_LIMIT_MS, 
         this.expectOp(')');
         const then = this.stmt();
         let els = null;
-        if (this.isKw('else')) { this.p++; els = this.stmt(); }
+        if (this.acceptKw('else')) els = this.stmt();
         return { k: 'if', cond, then, else: els, line: t.line };
       }
       if (this.isKw('while')) {
@@ -226,13 +324,23 @@ export function createDialect({ namespace, header, timeLimitMs = TIME_LIMIT_MS, 
         this.expectOp(')');
         return { k: 'while', cond, body: this.stmt(), line: t.line };
       }
+      if (this.isKw('do')) {
+        this.p++;
+        const body = this.stmt();
+        if (!this.acceptKw('while')) this.fail('do 后面必须跟 while (条件);');
+        this.expectOp('(');
+        const cond = this.expr();
+        this.expectOp(')');
+        this.expectOp(';');
+        return { k: 'do', cond, body, line: t.line };
+      }
       if (this.isKw('for')) {
         this.p++;
         this.expectOp('(');
         let init = null;
         if (this.isOp(';')) {
           this.p++;
-        } else if (this.peek().t === 'kw' && TYPES.has(this.peek().v)) {
+        } else if (this.atType()) {
           init = this.stmt();
         } else {
           init = { k: 'expr', e: this.expr(), line: t.line };
@@ -245,6 +353,33 @@ export function createDialect({ namespace, header, timeLimitMs = TIME_LIMIT_MS, 
         if (!this.isOp(')')) step = this.expr();
         this.expectOp(')');
         return { k: 'for', init, cond, step, body: this.stmt(), line: t.line };
+      }
+      if (this.isKw('switch')) {
+        this.p++;
+        this.expectOp('(');
+        const subject = this.expr();
+        this.expectOp(')');
+        this.expectOp('{');
+        const cases = [];
+        let def = null;
+        while (!this.isOp('}')) {
+          if (this.acceptKw('case')) {
+            const value = this.expr();
+            this.expectOp(':');
+            const body = [];
+            while (!this.isOp('}') && !this.isKw('case') && !this.isKw('default')) body.push(this.stmt());
+            cases.push({ value, body });
+          } else if (this.acceptKw('default')) {
+            this.expectOp(':');
+            const body = [];
+            while (!this.isOp('}') && !this.isKw('case') && !this.isKw('default')) body.push(this.stmt());
+            def = body;
+          } else {
+            this.fail('switch 里只能写 case 或 default');
+          }
+        }
+        this.p++;
+        return { k: 'switch', subject, cases, def, line: t.line };
       }
       if (this.isKw('return')) {
         this.p++;
@@ -263,10 +398,12 @@ export function createDialect({ namespace, header, timeLimitMs = TIME_LIMIT_MS, 
     expr() { return this.assign(); }
 
     assign() {
-      const left = this.or();
+      const left = this.ternary();
       const t = this.peek();
       if (t.t === 'op' && ASSIGN_OPS.includes(t.v)) {
-        if (left.k !== 'name' && left.k !== 'host') this.fail(`赋值的左边只能是变量或 ${NS}:: 变量`, t);
+        if (left.k !== 'name' && left.k !== 'host' && left.k !== 'index') {
+          this.fail(`赋值的左边只能是变量、数组元素或 ${NS}:: 变量`, t);
+        }
         this.p++;
         const value = this.assign();
         return { k: 'assign', op: t.v, target: left, value, line: t.line };
@@ -274,28 +411,37 @@ export function createDialect({ namespace, header, timeLimitMs = TIME_LIMIT_MS, 
       return left;
     }
 
-    bin(ops, sub) {
-      let left = sub();
+    ternary() {
+      const cond = this.binary(0);
+      if (this.isOp('?')) {
+        const t = this.next();
+        const a = this.assign();
+        this.expectOp(':');
+        const b = this.assign();
+        return { k: 'tern', cond, a, b, line: t.line };
+      }
+      return cond;
+    }
+
+    // 优先级从低到高
+    binary(level) {
+      const LEVELS = [['||'], ['&&'], ['|'], ['^'], ['&'], ['==', '!='], ['<', '<=', '>', '>='], ['<<', '>>'], ['+', '-'], ['*', '/', '%']];
+      if (level >= LEVELS.length) return this.unary();
+      let left = this.binary(level + 1);
       for (;;) {
         const t = this.peek();
-        if (t.t === 'op' && ops.includes(t.v)) {
+        if (t.t === 'op' && LEVELS[level].includes(t.v)) {
           this.p++;
-          const right = sub();
+          const right = this.binary(level + 1);
           left = { k: 'bin', op: t.v, a: left, b: right, line: t.line };
         } else break;
       }
       return left;
     }
-    or() { return this.bin(['||'], () => this.and()); }
-    and() { return this.bin(['&&'], () => this.eq()); }
-    eq() { return this.bin(['==', '!='], () => this.rel()); }
-    rel() { return this.bin(['<', '<=', '>', '>='], () => this.add()); }
-    add() { return this.bin(['+', '-'], () => this.mul()); }
-    mul() { return this.bin(['*', '/', '%'], () => this.unary()); }
 
     unary() {
       const t = this.peek();
-      if (t.t === 'op' && (t.v === '-' || t.v === '!')) {
+      if (t.t === 'op' && ['-', '!', '~'].includes(t.v)) {
         this.p++;
         return { k: 'un', op: t.v, a: this.unary(), line: t.line };
       }
@@ -307,7 +453,7 @@ export function createDialect({ namespace, header, timeLimitMs = TIME_LIMIT_MS, 
       for (;;) {
         const t = this.peek();
         if (this.isOp('++') || this.isOp('--')) {
-          if (e.k !== 'name' && e.k !== 'host') this.fail('++ / -- 只能用在变量上', t);
+          if (e.k !== 'name' && e.k !== 'host' && e.k !== 'index') this.fail('++ / -- 只能用在变量上', t);
           this.p++;
           e = { k: 'assign', op: t.v === '++' ? '+=' : '-=', target: e, value: { k: 'lit', v: 1, line: t.line }, line: t.line };
           continue;
@@ -350,7 +496,9 @@ export function createDialect({ namespace, header, timeLimitMs = TIME_LIMIT_MS, 
     primary() {
       const t = this.next();
       if (t.t === 'num') return { k: 'lit', v: t.v, line: t.line };
+      if (t.t === 'str') return { k: 'lit', v: t.v, line: t.line };
       if (t.t === 'kw' && (t.v === 'true' || t.v === 'false')) return { k: 'lit', v: t.v === 'true', line: t.line };
+      if (t.t === 'kw' && t.v === 'endl') return { k: 'lit', v: '\n', line: t.line };
       if (t.t === 'kw' && t.v === 'pair') {
         this.expectOp('(');
         const a = this.expr();
@@ -374,7 +522,8 @@ export function createDialect({ namespace, header, timeLimitMs = TIME_LIMIT_MS, 
   }
 
   function parse(src) {
-    return new Parser(lex(src)).program();
+    const defines = new Map();
+    return new Parser(lex(src, defines)).program();
   }
 
   function checkCode(src) {
@@ -392,6 +541,7 @@ export function createDialect({ namespace, header, timeLimitMs = TIME_LIMIT_MS, 
     if (type === 'int') return 0;
     if (type === 'bool') return false;
     if (type === 'pair') return new Pair(0, 0);
+    if (type === 'string') return '';
     return undefined;
   }
 
@@ -405,22 +555,26 @@ export function createDialect({ namespace, header, timeLimitMs = TIME_LIMIT_MS, 
       this.depth = 0;
       this.steps = 0;
       this.deadline = 0;
+      this.out = [];
     }
 
+    /** 每帧调用一次；host 提供 :: 变量、函数，以及可选的 console(line) */
     runMain(host) {
       this.host = host;
       this.env = [];
       this.depth = 0;
       this.steps = 0;
+      this.out = [];
       this.deadline = now() + timeLimitMs;
       if (!this.inited) {
         this.inited = true;
         for (const g of this.ast.globals) {
           const v = g.init ? this.coerce(g.type, this.eval(g.init), g.line) : defaultOf(g.type);
-          this.globals.set(g.name, { type: g.type, value: v });
+          this.globals.set(g.name, { type: g.type, value: v, isConst: g.isConst });
         }
       }
-      return this.callUser('main', [], 0);
+      this.callUser('main', [], 0);
+      return this.out;
     }
 
     budget(line) {
@@ -433,8 +587,9 @@ export function createDialect({ namespace, header, timeLimitMs = TIME_LIMIT_MS, 
 
     coerce(type, v, line) {
       if (type === 'int') {
-        if (typeof v !== 'number') this.fail('类型错误：这里需要 int', line);
-        return v;
+        if (typeof v === 'number') return Math.trunc(v);
+        if (typeof v === 'boolean') return v ? 1 : 0;
+        this.fail('类型错误：这里需要 int', line);
       }
       if (type === 'bool') {
         if (typeof v === 'boolean') return v;
@@ -442,16 +597,22 @@ export function createDialect({ namespace, header, timeLimitMs = TIME_LIMIT_MS, 
         this.fail('类型错误：这里需要 bool', line);
       }
       if (type === 'pair') {
-        if (!(v instanceof Pair)) this.fail('类型错误：这里需要 pair', line);
-        return v;
+        if (v instanceof Pair) return v;
+        this.fail('类型错误：这里需要 pair', line);
+      }
+      if (type === 'string') {
+        if (typeof v === 'string') return v;
+        this.fail('类型错误：这里需要 string', line);
       }
       this.fail('类型错误', line);
       return v;
     }
 
     needInt(v, line) {
-      if (typeof v !== 'number') this.fail('类型错误：这里需要 int', line);
-      return v;
+      if (typeof v === 'number') return Math.trunc(v);
+      if (typeof v === 'boolean') return v ? 1 : 0;
+      this.fail('类型错误：这里需要 int', line);
+      return 0;
     }
 
     truthy(v, line) {
@@ -512,11 +673,35 @@ export function createDialect({ namespace, header, timeLimitMs = TIME_LIMIT_MS, 
       switch (s.k) {
         case 'block':
           return this.execBlock(s.body);
+        case 'decls': {
+          for (const d of s.list) this.exec(d);
+          return null;
+        }
         case 'decl': {
           const scope = this.env[this.env.length - 1];
           if (scope.has(s.name)) this.fail(`变量 ${s.name} 已经定义过了`, s.line);
-          const v = s.init ? this.coerce(s.type, this.eval(s.init), s.line) : defaultOf(s.type);
-          scope.set(s.name, { type: s.type, value: v });
+          let value;
+          if (s.arraySize) {
+            const size = this.needInt(this.eval(s.arraySize), s.line);
+            if (size <= 0 || size > 1000) this.fail(`数组长度必须在 1–1000 之间（当前 ${size}）`, s.line);
+            value = { array: Array.from({ length: size }, () => defaultOf(s.type)), elemType: s.type };
+          } else {
+            value = s.init ? this.coerce(s.type, this.eval(s.init), s.line) : defaultOf(s.type);
+          }
+          scope.set(s.name, { type: s.type, value, isConst: s.isConst });
+          return null;
+        }
+        case 'cout': {
+          let text = '';
+          for (const p of s.parts) {
+            const v = this.eval(p);
+            text += typeof v === 'boolean' ? (v ? 'true' : 'false') : (v instanceof Pair ? `(${v.first}, ${v.second})` : String(v));
+          }
+          if (this.out.length >= MAX_CONSOLE_LINES) {
+            this.fail(`cout 输出超过 ${MAX_CONSOLE_LINES} 行，请减少调试输出`, s.line);
+          }
+          this.out.push(text);
+          if (this.host && typeof this.host.console === 'function') this.host.console(text);
           return null;
         }
         case 'expr':
@@ -535,6 +720,15 @@ export function createDialect({ namespace, header, timeLimitMs = TIME_LIMIT_MS, 
             }
           }
           return null;
+        case 'do':
+          do {
+            const sig = this.exec(s.body);
+            if (sig) {
+              if (sig.kind === 'break') break;
+              if (sig.kind === 'return') return sig;
+            }
+          } while (this.truthy(this.eval(s.cond), s.line));
+          return null;
         case 'for': {
           this.env.push(new Map());
           try {
@@ -551,6 +745,29 @@ export function createDialect({ namespace, header, timeLimitMs = TIME_LIMIT_MS, 
           } finally {
             this.env.pop();
           }
+        }
+        case 'switch': {
+          const subject = this.eval(s.subject);
+          let matched = false;
+          for (const c of s.cases) {
+            const v = this.eval(c.value);
+            if (!matched && v === subject) matched = true;
+            if (matched) {
+              const sig = this.execBlock(c.body);
+              if (sig) {
+                if (sig.kind === 'break') return null;
+                if (sig.kind === 'return') return sig;
+              }
+            }
+          }
+          if (!matched && s.def) {
+            const sig = this.execBlock(s.def);
+            if (sig) {
+              if (sig.kind === 'break') return null;
+              if (sig.kind === 'return') return sig;
+            }
+          }
+          return null;
         }
         case 'break': return { kind: 'break' };
         case 'continue': return { kind: 'continue' };
@@ -576,6 +793,11 @@ export function createDialect({ namespace, header, timeLimitMs = TIME_LIMIT_MS, 
           if (b === 0) this.fail('除数不能为 0', line);
           return a % b;
         }
+        case '&': return this.needInt(a, line) & this.needInt(b, line);
+        case '|': return this.needInt(a, line) | this.needInt(b, line);
+        case '^': return this.needInt(a, line) ^ this.needInt(b, line);
+        case '<<': return this.needInt(a, line) << this.needInt(b, line);
+        case '>>': return this.needInt(a, line) >> this.needInt(b, line);
         default:
           this.fail(`未知运算符 ${op}`, line);
           return 0;
@@ -585,6 +807,7 @@ export function createDialect({ namespace, header, timeLimitMs = TIME_LIMIT_MS, 
     equal(a, b, line) {
       if (typeof a === 'number' && typeof b === 'number') return a === b;
       if (typeof a === 'boolean' && typeof b === 'boolean') return a === b;
+      if (typeof a === 'string' && typeof b === 'string') return a === b;
       if (a instanceof Pair && b instanceof Pair) return a.first === b.first && a.second === b.second;
       this.fail('类型不同，不能比较', line);
       return false;
@@ -604,8 +827,11 @@ export function createDialect({ namespace, header, timeLimitMs = TIME_LIMIT_MS, 
         case 'un': {
           const v = this.eval(e.a);
           if (e.op === '-') return -this.needInt(v, e.line);
+          if (e.op === '~') return ~this.needInt(v, e.line);
           return !this.truthy(v, e.line);
         }
+        case 'tern':
+          return this.truthy(this.eval(e.cond), e.line) ? this.eval(e.a) : this.eval(e.b);
         case 'bin': return this.binop(e);
         case 'assign': return this.assign(e);
         case 'call': {
@@ -616,21 +842,32 @@ export function createDialect({ namespace, header, timeLimitMs = TIME_LIMIT_MS, 
         case 'index': {
           const arr = this.eval(e.a);
           const idx = this.needInt(this.eval(e.idx), e.line);
-          if (!Array.isArray(arr)) this.fail('只有数组可以用 [ ]', e.line);
-          if (idx < 0 || idx >= arr.length) this.fail(`数组下标越界：${idx}（长度 ${arr.length}）`, e.line);
-          return arr[idx];
+          if (Array.isArray(arr)) {
+            if (idx < 0 || idx >= arr.length) this.fail(`数组下标越界：${idx}（长度 ${arr.length}）`, e.line);
+            return arr[idx];
+          }
+          if (arr && Array.isArray(arr.array)) {
+            if (idx < 0 || idx >= arr.array.length) this.fail(`数组下标越界：${idx}（长度 ${arr.array.length}）`, e.line);
+            return arr.array[idx];
+          }
+          this.fail('只有数组可以用 [ ]', e.line);
+          return 0;
         }
         case 'member': {
           const obj = this.eval(e.a);
-          if (!(obj instanceof Pair)) this.fail('只有 pair 有 .first / .second', e.line);
-          if (e.name === 'first') return obj.first;
-          if (e.name === 'second') return obj.second;
-          this.fail(`pair 没有成员 ${e.name}`, e.line);
+          if (obj instanceof Pair) {
+            if (e.name === 'first') return obj.first;
+            if (e.name === 'second') return obj.second;
+            this.fail(`pair 没有成员 ${e.name}`, e.line);
+          }
+          if (e.name === 'size' && Array.isArray(obj)) return obj.length;
+          this.fail(`没有成员 ${e.name}`, e.line);
           return 0;
         }
         case 'method': {
           const obj = this.eval(e.a);
           if (Array.isArray(obj) && e.name === 'size') return obj.length;
+          if (obj && Array.isArray(obj.array) && e.name === 'size') return obj.array.length;
           this.fail(`没有方法 ${e.name}()`, e.line);
           return 0;
         }
@@ -665,19 +902,44 @@ export function createDialect({ namespace, header, timeLimitMs = TIME_LIMIT_MS, 
     assign(e) {
       const value = this.eval(e.value);
       const op = e.op === '=' ? null : e.op.slice(0, 1);
+
+      // 数组元素赋值
+      if (e.target.k === 'index') {
+        const container = this.eval(e.target.a);
+        const idx = this.needInt(this.eval(e.target.idx), e.target.line);
+        if (container && Array.isArray(container.array)) {
+          if (idx < 0 || idx >= container.array.length) {
+            this.fail(`数组下标越界：${idx}（长度 ${container.array.length}）`, e.target.line);
+          }
+          const cur = container.array[idx];
+          const nv = op ? this.arith(op, cur, value, e.target.line) : value;
+          container.array[idx] = this.coerce(container.elemType, nv, e.target.line);
+          return container.array[idx];
+        }
+        if (Array.isArray(container)) {
+          if (idx < 0 || idx >= container.length) this.fail('数组下标越界', e.target.line);
+          const nv = op ? this.arith(op, container[idx], value, e.target.line) : value;
+          container[idx] = this.coerce(typeof nv === 'boolean' ? 'bool' : 'int', nv, e.target.line);
+          return container[idx];
+        }
+        this.fail('不能给这个下标赋值', e.target.line);
+      }
+
       if (e.target.k === 'name') {
-        const slot = this.findVar(e.target.name, e.line);
-        const nv = op ? this.arith(op, slot.value, value, e.line) : value;
-        slot.value = this.coerce(slot.type, nv, e.line);
+        const slot = this.findVar(e.target.name, e.target.line);
+        if (slot.isConst) this.fail(`常量 ${e.target.name} 不能修改`, e.target.line);
+        const nv = op ? this.arith(op, slot.value, value, e.target.line) : value;
+        slot.value = this.coerce(slot.type, nv, e.target.line);
         return slot.value;
       }
+
       const name = e.target.name;
       const ty = this.host.writableType(name);
-      if (!ty) this.fail(`${NS}::${name} 是只读的，不能修改`, e.line);
-      const cur = this.host.read(name, e.line);
-      const nv = op ? this.arith(op, cur, value, e.line) : value;
-      const coerced = this.coerce(ty, nv, e.line);
-      this.host.write(name, coerced, e.line);
+      if (!ty) this.fail(`${NS}::${name} 是只读的，不能修改`, e.target.line);
+      const cur = this.host.read(name, e.target.line);
+      const nv = op ? this.arith(op, cur, value, e.target.line) : value;
+      const coerced = this.coerce(ty, nv, e.target.line);
+      this.host.write(name, coerced, e.target.line);
       return coerced;
     }
   }
@@ -688,7 +950,7 @@ export function createDialect({ namespace, header, timeLimitMs = TIME_LIMIT_MS, 
 
   return {
     namespace: NS,
-    header: HEADER,
+    header,
     label,
     timeLimitMs,
     lex,

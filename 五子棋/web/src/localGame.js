@@ -20,8 +20,16 @@ export function runLocalGame(mySrc, oppSrc, myColor = 'black') {
   const frames = [{ type: 'start', snapshot: snapshot(g) }];
   let guard = 0;
   while (!g.over && guard++ < 240) {
+    const colorBefore = g.current;   // 必须在 runTurn 之前取，落子后会换手
     const r = runTurn(g, interpreters);
-    frames.push({ type: 'move', snapshot: snapshot(g), error: r.error });
+    frames.push({
+      type: 'move',
+      snapshot: snapshot(g),
+      error: r.error,
+      console: colorBefore === 1
+        ? { player1: r.console || [], player2: [] }
+        : { player1: [], player2: r.console || [] },
+    });
   }
   const me = myColor;               // 'black' | 'white'
   const result = g.result === 'draw' ? 'draw' : (g.result === me ? 'me' : 'opponent');

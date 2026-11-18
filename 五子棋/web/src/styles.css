@@ -105,7 +105,7 @@ select, input {
 .replay-panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
 .replay-panel h3 { font-size: 14px; margin-bottom: 8px; }
 
-/* 妫嬬洏鍙鎬э細鍥村鏇存槑鏄撅紝绌哄湴鐣欏簳鑹?*/
+/* 棋盘可读性：围墙更明显，空地留底色 */
 .cell { background: rgba(148, 163, 184, 0.06); }
 .cell.wall { background: #475569; box-shadow: inset 0 0 0 1px #64748b; }
 .board-grid { gap: 2px; padding: 4px; background: rgba(2, 6, 23, 0.85); border-radius: 8px; }
@@ -149,3 +149,12 @@ select, input {
 .docs-close:hover { color: #fff; }
 .docs-drawer .docs-tabs { padding: 12px 18px 0; margin-bottom: 0; }
 .docs-drawer-body { flex: 1; overflow-y: auto; padding: 0 18px 24px; }
+
+/* 控制台（cout 输出） */
+.console-box { background: rgba(2, 6, 23, 0.85); border: 1px solid var(--border); border-radius: 14px; padding: 12px; }
+.console-box h3 { font-size: 14px; margin-bottom: 8px; }
+.console-list { max-height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; font-family: Consolas, 'Courier New', monospace; font-size: 12px; }
+.console-line { display: flex; gap: 8px; color: #a5f3fc; white-space: pre-wrap; word-break: break-all; }
+.console-tag { flex-shrink: 0; font-size: 10px; padding: 0 5px; border-radius: 4px; }
+.console-tag.me { background: rgba(34, 211, 238, 0.2); color: #67e8f9; }
+.console-tag.op { background: rgba(251, 146, 60, 0.2); color: #fdba74; }

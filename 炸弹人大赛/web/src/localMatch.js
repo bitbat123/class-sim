@@ -3,7 +3,7 @@
 import {
   createMatch, step, loadScript, runScriptFrame,
 } from '@shared/game.js';
-import { checkCode } from '@shared/interp.js';
+import { checkCode } from '@shared/game.js';
 
 const SPEED_MS = 60;
 
@@ -38,6 +38,10 @@ export function runLocalMatch(mySrc, oppSrc, mapIndex) {
       errors: {
         player1: a.ok ? null : a,
         player2: b.ok ? null : b,
+      },
+      console: {
+        player1: a.console || [],
+        player2: b.console || [],
       },
     });
   }

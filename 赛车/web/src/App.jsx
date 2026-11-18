@@ -119,7 +119,20 @@ export default function App() {
               {!frame && <div className="muted small">还没有开始比赛。</div>}
             </div>
           </div>
-        </section>
+          <div className="console-box">
+            <h3>🖥 控制台（cout）</h3>
+            <div className="console-list">
+              {!(frame?.console?.player1?.length) && !(frame?.console?.player2?.length) && (
+                <div className="muted small">没有输出。用 cout &lt;&lt; "..." &lt;&lt; endl; 打印调试信息。</div>
+              )}
+              {(frame?.console?.player1 || []).map((line, i) => (
+                <div key={`me-${i}`} className="console-line"><span className="console-tag me">我</span>{line}</div>
+              ))}
+              {(frame?.console?.player2 || []).map((line, i) => (
+                <div key={`op-${i}`} className="console-line"><span className="console-tag op">对手</span>{line}</div>
+              ))}
+            </div>
+          </div>        </section>
       </main>
     </div>
   );

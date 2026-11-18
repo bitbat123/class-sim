@@ -17,11 +17,15 @@ export function runLocalRace(mySrc, oppSrc, seed = 7) {
 
   let guard = 0;
   while (!race.over && guard++ < MAX_TICKS + 10) {
-    runFrame(race, 0, mine);
-    runFrame(race, 1, theirs);
+    const a = runFrame(race, 0, mine);
+    const b = runFrame(race, 1, theirs);
     stepRace(race);
     // 每 2 帧录一帧，回放不至于太长
-    if (race.tick % 2 === 0 || race.over) frames.push({ type: 'tick', snapshot: snapshot(race) });
+    if (race.tick % 2 === 0 || race.over) frames.push({
+      type: 'tick',
+      snapshot: snapshot(race),
+      console: { player1: a.console || [], player2: b.console || [] },
+    });
   }
   const result = race.result === 'draw' ? 'draw' : (race.result === 'car1' ? 'me' : 'opponent');
   return { frames, result, ticks: race.tick, error: null };

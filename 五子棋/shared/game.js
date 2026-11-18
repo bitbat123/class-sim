@@ -167,12 +167,18 @@ export function runTurn(g, interpreters) {
   const color = g.current;
   const interp = interpreters[color === BLACK ? 'black' : 'white'];
   g.pendingMove = null;
+  g.consoleOut = [];
   let error = null;
   if (!interp) {
     error = { message: '没有提供程序' };
   } else {
     try {
-      interp.runMain(makeHost(g, color));
+      // 捕获 cout 输出，供前端控制台面板显示
+      const host = makeHost(g, color);
+      host.console = (line) => {
+        if (g.consoleOut.length < 60) g.consoleOut.push(line);
+      };
+      interp.runMain(host);
     } catch (e) {
       error = { message: e.message, line: e.line };
     }
@@ -189,7 +195,7 @@ export function runTurn(g, interpreters) {
   } else {
     place(g, color, mv.x, mv.y);
   }
-  return { error, move: g.lastMove };
+  return { error, move: g.lastMove, console: g.consoleOut };
 }
 
 export function snapshot(g) {
