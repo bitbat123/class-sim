@@ -5,6 +5,8 @@ import { checkCode } from '@shared/game.js';
 import { BASELINES } from '@shared/baselines.js';
 import CodeEditor from './components/CodeEditor.jsx';
 import Track from './components/Track.jsx';
+import DocsPanel from './components/DocsPanel.jsx';
+import { CAR_API } from './apiData.js';
 
 const randomSeed = () => Math.floor(Math.random() * 100000);
 
@@ -63,6 +65,8 @@ export default function App() {
           <button className="btn-primary" onClick={start}>▶ 与基准程序比赛</button>
         </div>
       </header>
+
+      <DocsPanel api={CAR_API} />
 
       <main className="layout">
         <section className="col-editor">

@@ -1,8 +1,8 @@
-﻿import { defineConfig } from 'vite';
+import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'node:path';
 
-// 鐐稿脊浜哄ぇ璧涘墠绔細base 璁句负 /bomb-contest/锛岄儴缃插埌 GitHub Pages 鐨勫瓙璺緞
+// 炸弹人大赛前端：base 设为 /bomb-contest/
 export default defineConfig({
   root: path.resolve('./web'),
   base: '/class-sim/bomb-contest/',

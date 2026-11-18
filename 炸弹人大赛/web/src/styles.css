@@ -109,3 +109,17 @@ select, input {
 .cell { background: rgba(148, 163, 184, 0.06); }
 .cell.wall { background: #475569; box-shadow: inset 0 0 0 1px #64748b; }
 .board-grid { gap: 2px; padding: 4px; background: rgba(2, 6, 23, 0.85); border-radius: 8px; }
+
+/* 文档面板 */
+.docs-panel { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 16px; margin-bottom: 14px; }
+.docs-tabs { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.docs-tabs button { background: rgba(15,23,42,0.7); border: 1px solid var(--border); color: #94a3b8; font: inherit; padding: 7px 14px; border-radius: 9px; cursor: pointer; }
+.docs-tabs button.on { background: linear-gradient(135deg, #8b5cf6, #06b6d4); color: #fff; font-weight: 600; }
+.docs-body h4 { font-size: 14px; margin: 16px 0 8px; color: #fbbf24; }
+.docs-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.docs-table th, .docs-table td { padding: 6px 9px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+.docs-table th { color: #94a3b8; font-weight: 600; background: rgba(15,23,42,0.6); }
+.docs-table td.ours { color: #67e8f9; }
+.docs-table code { background: rgba(15,23,42,0.8); padding: 1px 5px; border-radius: 4px; color: #67e8f9; }
+.subset { background: rgba(15,23,42,0.85); border: 1px solid var(--border); border-radius: 10px; padding: 12px; font-size: 12.5px; line-height: 1.8; overflow-x: auto; color: #a5f3fc; }
+.rules-ul { margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.9; color: #cbd5e1; }

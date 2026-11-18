@@ -5,6 +5,8 @@ import { checkCode } from '@shared/game.js';
 import { BASELINES } from '@shared/baselines.js';
 import CodeEditor from './components/CodeEditor.jsx';
 import Board from './components/Board.jsx';
+import DocsPanel from './components/DocsPanel.jsx';
+import { GO_API } from './apiData.js';
 
 export default function App() {
   const [code, setCode] = useState(DEFAULT_CODE);
@@ -63,6 +65,8 @@ export default function App() {
           <button className="btn-primary" onClick={start}>▶ 与基准程序对局</button>
         </div>
       </header>
+
+      <DocsPanel api={GO_API} />
 
       <main className="layout">
         <section className="col-editor">

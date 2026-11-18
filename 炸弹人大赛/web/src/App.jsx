@@ -6,6 +6,8 @@ import { checkCode } from '@shared/interp.js';
 import CodeEditor from './components/CodeEditor.jsx';
 import Board from './components/Board.jsx';
 import OnlineMode from './components/OnlineMode.jsx';
+import DocsPanel from './components/DocsPanel.jsx';
+import { BOMB_API } from './apiData.js';
 
 export default function App() {
   const [mode, setMode] = useState('local'); // local | online
@@ -84,6 +86,8 @@ export default function App() {
           )}
         </div>
       </header>
+
+      <DocsPanel api={BOMB_API} />
 
       {mode === 'online' ? (
         <OnlineMode />

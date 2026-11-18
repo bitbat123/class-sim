@@ -98,7 +98,7 @@ export function makeHost(g, color) {
   };
 
   const readers = {
-    me: () => meName,
+    me: () => my,
     my_color: () => my,
     opp_color: () => opp,
     size: () => SIZE,
