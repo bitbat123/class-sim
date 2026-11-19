@@ -50,8 +50,29 @@ void main() {
 }`;
 
 // 可插值的列表：把基准程序也放进来，方便选手参考
+// 用 cout 调试的小例子：把每回合的决策打印到「控制台」面板
+export const COUT_DEMO = `#include<bomb.h>
+void main() {
+  int n = bomb::enemy_pos.size();
+  cout << "回合 " << bomb::turn << " 敌人 " << n << " 冷却 " << bomb::cooldown << endl;
+  if (n == 0) return;
+
+  pair me = bomb::player_pos;
+  pair foe = bomb::enemy_pos[0];
+  int d = 0;
+  if (foe.first > me.first) d = 1;
+  else if (foe.second > me.second) d = 2;
+  else if (foe.first < me.first) d = 3;
+  if (bomb::can_move(d)) {
+    bomb::player_dir = d;
+    cout << "  朝方向 " << d << " 前进" << endl;
+  } else {
+    cout << "  方向 " << d << " 被挡住" << endl;
+  }
+}`;
 export const STARTERS = [
   { id: 'default', name: '默认模板', src: DEFAULT_CODE },
+  { id: 'cout', name: 'cout 调试示例', src: COUT_DEMO },
   { id: 'weak', name: BASELINES.weak.name, src: BASELINES.weak.src },
   { id: 'medium', name: BASELINES.medium.name, src: BASELINES.medium.src },
   { id: 'strong', name: BASELINES.strong.name, src: BASELINES.strong.src },

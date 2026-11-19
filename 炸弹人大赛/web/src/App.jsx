@@ -18,7 +18,7 @@ export default function App() {
   const [playback, setPlayback] = useState(null);
   const [cursor, setCursor] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [speed, setSpeed] = useState(SPEED_MS);
+  const [speed, setSpeed] = useState(SPEED_MS);   // 默认 1×（260ms/帧）
 
   // 语法检查（防抖，避免每次按键都解析一遍）
   useEffect(() => {
@@ -136,11 +136,11 @@ export default function App() {
               <button className="btn-small" onClick={() => { setCursor(0); setPlaying(true); }}>⏮</button>
               <button className="btn-small" onClick={() => setPlaying((p) => !p)}>{playing ? '⏸ 暂停' : '▶ 播放'}</button>
               <select value={speed} onChange={(e) => setSpeed(Number(e.target.value))} aria-label="播放速度">
-                <option value={400}>0.15×</option>
-                <option value={200}>0.3×</option>
-                <option value={100}>0.6×</option>
-                <option value={60}>1×</option>
-                <option value={25}>2.5×</option>
+                <option value={800}>0.3×</option>
+                <option value={500}>0.5×</option>
+                <option value={260}>1×</option>
+                <option value={120}>2×</option>
+                <option value={40}>6×</option>
               </select>
               <input
                 type="range"

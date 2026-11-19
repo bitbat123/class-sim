@@ -5,7 +5,7 @@ import {
 } from '@shared/game.js';
 import { checkCode } from '@shared/game.js';
 
-const SPEED_MS = 60;
+const SPEED_MS = 260;   // 默认放慢，6 回合的对局也能看清过程
 
 /**
  * 跑一局本地对战。
