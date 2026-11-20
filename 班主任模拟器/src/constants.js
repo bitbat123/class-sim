@@ -242,22 +242,24 @@ export const SCORE_BANDS_150 = [
 
 // ============ 高考与升学 ============
 // 满分：语数英各 150，其余 6 科各 100，总分 750
+// 高考总分 = 9 科满分之和：语数英各 150（450）+ 其余 6 科各 100（600）= 1050
 export const GAOKAO = {
-  total: 750,
+  total: 1050,
   // 录取档位（按总分从高到低匹配第一个满足的档位）
+  // 阈值按 1050 满分折算，大致对应 750 制的 985/211/一本/二本分数线
   tiers: [
-    { min: 690, name: '清华大学', level: 'S', color: '#fbbf24' },
-    { min: 660, name: '北京大学', level: 'S', color: '#fbbf24' },
-    { min: 640, name: '复旦大学', level: 'A', color: '#a855f7' },
-    { min: 620, name: '上海交通大学', level: 'A', color: '#a855f7' },
-    { min: 600, name: '浙江大学', level: 'A', color: '#a855f7' },
-    { min: 580, name: '南京大学', level: 'B', color: '#3b82f6' },
-    { min: 550, name: '武汉大学', level: 'B', color: '#3b82f6' },
-    { min: 520, name: '一本院校', level: 'B', color: '#3b82f6' },
-    { min: 480, name: '二本院校', level: 'C', color: '#22c55e' },
-    { min: 430, name: '三本院校', level: 'C', color: '#22c55e' },
-    { min: 350, name: '专科院校', level: 'D', color: '#f59e0b' },
-    { min: 250, name: '民办专科', level: 'E', color: '#f97316' },
+    { min: 966, name: '清华大学', level: 'S', color: '#fbbf24' },
+    { min: 924, name: '北京大学', level: 'S', color: '#fbbf24' },
+    { min: 896, name: '复旦大学', level: 'A', color: '#a855f7' },
+    { min: 868, name: '上海交通大学', level: 'A', color: '#a855f7' },
+    { min: 840, name: '浙江大学', level: 'A', color: '#a855f7' },
+    { min: 812, name: '南京大学', level: 'B', color: '#3b82f6' },
+    { min: 770, name: '武汉大学', level: 'B', color: '#3b82f6' },
+    { min: 728, name: '一本院校', level: 'B', color: '#3b82f6' },
+    { min: 672, name: '二本院校', level: 'C', color: '#22c55e' },
+    { min: 602, name: '三本院校', level: 'C', color: '#22c55e' },
+    { min: 490, name: '专科院校', level: 'D', color: '#f59e0b' },
+    { min: 350, name: '民办专科', level: 'E', color: '#f97316' },
     { min: 0, name: '复读 / 落榜', level: 'F', color: '#ef4444' },
   ],
 };

@@ -30,7 +30,7 @@ export default function GaokaoResult({ gaokao, onRestart, inline = false, onClos
       <header className="gaokao-head">
         <h2>🎓 高考成绩</h2>
         <p className="muted small">
-          全班 {rows.length} 人 · 平均分 <b>{avg}</b> / 750 · 最高分 <b>{best ? best.total : 0}</b>
+          全班 {rows.length} 人 · 平均分 <b>{avg}</b> / {top ? top.max : 1050} · 最高分 <b>{best ? best.total : 0}</b>
           {best && <>（{best.name} · {best.school}）</>}
         </p>
       </header>
@@ -97,7 +97,7 @@ export default function GaokaoResult({ gaokao, onRestart, inline = false, onClos
 
       <div className="gaokao-foot">
         <span className="muted small">
-          分数 = 9 科熟练度 × 科目满分 ± 随机波动；总分 750
+          分数 = 9 科熟练度 × 科目满分 ± 随机波动；总分 1050（语数英各 150 + 其余 6 科各 100）
         </span>
         <div className="gaokao-actions">
           {onClose && <button className="btn-small" onClick={onClose}>关闭</button>}
