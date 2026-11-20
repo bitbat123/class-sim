@@ -12,6 +12,7 @@ import MoralePanel from './components/MoralePanel.jsx';
 import PeerPanel from './components/PeerPanel.jsx';
 import { useRoom } from './net/useRoom.js';
 import { scoreColor } from './components/colors.js';
+import GaokaoResult from './components/GaokaoResult.jsx';
 import { THEMES, THEME_BY_ID } from './themes.js';
 
 const newSeed = () => Math.floor(Math.random() * 4294967296);
@@ -152,7 +153,15 @@ export default function App() {
         />
       )}
 
-      {state.finished && (
+      {state.finished && state.gaokao && !state.gaokaoDismissed && (
+        <GaokaoResult
+          gaokao={state.gaokao}
+          onRestart={() => (net.online ? net.disconnect() : dispatch({ type: 'RESET' }))}
+          onClose={() => dispatch({ type: 'DISMISS_GAOKAO' })}
+        />
+      )}
+
+      {state.finished && (!state.gaokao || state.gaokaoDismissed) && (
         <div className="modal-mask">
           <div className="modal card">
             <h2>🎓 毕业典礼</h2>

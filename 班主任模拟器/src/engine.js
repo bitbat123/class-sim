@@ -3,7 +3,7 @@ import {
   GRADES, MASTERY_PER_GRADE, SUBJECTS, SYSTEMS, DIFFICULTY,
   STUDY_ACTIONS, RELIEF_ACTIONS, PRESSURE, CALENDAR,
   TRAITS, TRAIT_BY_ID, APTITUDE, LUCK, DIMINISHING, STUDY_SCALE, SICK,
-  MODES, TIME_SCALE, MORALE, TEACHER_NOTES,
+  MODES, TIME_SCALE, MORALE, TEACHER_NOTES, GAOKAO, GAOKAO_LUCK,
 } from './constants.js';
 import { GOAL_POOL, GOAL_BY_ID, ACHIEVEMENTS } from './goals.js';
 
@@ -186,6 +186,65 @@ function cloneStudents(students) {
  * 生成一场考试。分数 = 熟练度比例 ± 8% 随机波动。
  * 排名：班内排名 + 全校排名（以班级成绩均值/标准差估计正态分布，全校人数 = x * 20）。
  */
+/**
+ * 高考：在全部学年结束时执行一次。
+ * 分数来源：该生 9 科熟练度比例 × 科目满分，再叠加 ±GAOKAO_LUCK 的随机波动。
+ * 总分 750，按 GAOKAO.tiers 匹配录取学校。
+ */
+export function runGaokao(students, seed) {
+  const rng = mulberry32(seed);
+  const rows = students.map((st) => {
+    const scores = {};
+    let total = 0;
+    for (const sub of SUBJECTS) {
+      const base = st.mastery[sub.key] / 100;
+      const rate = clamp(base + (rng() * 2 - 1) * GAOKAO_LUCK, 0, 1);
+      const sc = Math.round(rate * sub.max);
+      scores[sub.key] = sc;
+      total += sc;
+    }
+    const tier = GAOKAO.tiers.find((t) => total >= t.min) || GAOKAO.tiers[GAOKAO.tiers.length - 1];
+    return {
+      id: st.id,
+      name: st.name,
+      scores,
+      total,
+      max: GAOKAO.total,
+      school: tier.name,
+      level: tier.level,
+      color: tier.color,
+      sick: st.sickWeeks > 0,
+      traits: st.traits,
+      pressure: st.pressure,
+    };
+  });
+
+  // 班内排名
+  const sorted = [...rows].sort((a, b) => b.total - a.total);
+  sorted.forEach((r, i) => { r.rank = i + 1; });
+
+  const n = rows.length || 1;
+  const avg = rows.reduce((a, r) => a + r.total, 0) / n;
+  const best = sorted[0] || null;
+  const topSchool = rows.reduce((acc, r) => {
+    const idx = GAOKAO.tiers.findIndex((t) => t.name === r.school);
+    return idx >= 0 && (acc === null || idx < acc.idx) ? { idx, name: r.school } : acc;
+  }, null);
+
+  return {
+    at: 'graduation',
+    rows: sorted,
+    avg: Math.round(avg),
+    best: best ? { name: best.name, total: best.total, school: best.school } : null,
+    topSchool: topSchool ? topSchool.name : null,
+    // 录取分布，用于汇总展示
+    schoolCount: rows.reduce((acc, r) => {
+      acc[r.school] = (acc[r.school] || 0) + 1;
+      return acc;
+    }, {}),
+  };
+}
+
 export function makeExam(students, x, title, keys, seed, week) {
   const rng = mulberry32(seed);
   const rows = students.map((st) => {
@@ -618,6 +677,8 @@ function doEndWeek(state, seed) {
   // 7. 学期末：小目标结算（学期最后一周）
   const nextAbs = state.absWeek + 1;
   const finished = nextAbs >= state.totalWeeks;
+  // 全部学年结束时，执行一次高考
+  const gaokao = finished && !state.gaokao ? runGaokao(students, seed ^ 0x9e3779b9) : state.gaokao;
   let goals = state.goals;
   let goalResults = state.goalResults;
   let lastSemesterClean = state.lastSemesterClean;
@@ -662,6 +723,7 @@ function doEndWeek(state, seed) {
     actionsLeft: CALENDAR.actionsPerWeek,
     event,
     finished,
+    gaokao,
     morale: clampMorale(morale),
     note,
     goals,
@@ -693,6 +755,7 @@ export function gameReducer(state, action) {
   if (action.type === 'START') return createGame(action.payload);
   if (action.type === 'RESET') return null;
   if (action.type === 'DISMISS_EXAM') return state; // 考试弹窗是纯界面状态
+  if (action.type === 'DISMISS_GAOKAO') return state ? { ...state, gaokaoDismissed: true } : state;
   const cur = state && state.mode === undefined ? migrateState(state) : state;
   if (!cur) return cur;
   switch (action.type) {

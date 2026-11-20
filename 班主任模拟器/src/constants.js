@@ -239,3 +239,27 @@ export const SCORE_BANDS_150 = [
   { max: 142.5, color: '#22c55e', label: '127–142' },
   { max: 151, color: '#8b5cf6', label: '142+' },
 ];
+
+// ============ 高考与升学 ============
+// 满分：语数英各 150，其余 6 科各 100，总分 750
+export const GAOKAO = {
+  total: 750,
+  // 录取档位（按总分从高到低匹配第一个满足的档位）
+  tiers: [
+    { min: 690, name: '清华大学', level: 'S', color: '#fbbf24' },
+    { min: 660, name: '北京大学', level: 'S', color: '#fbbf24' },
+    { min: 640, name: '复旦大学', level: 'A', color: '#a855f7' },
+    { min: 620, name: '上海交通大学', level: 'A', color: '#a855f7' },
+    { min: 600, name: '浙江大学', level: 'A', color: '#a855f7' },
+    { min: 580, name: '南京大学', level: 'B', color: '#3b82f6' },
+    { min: 550, name: '武汉大学', level: 'B', color: '#3b82f6' },
+    { min: 520, name: '一本院校', level: 'B', color: '#3b82f6' },
+    { min: 480, name: '二本院校', level: 'C', color: '#22c55e' },
+    { min: 430, name: '三本院校', level: 'C', color: '#22c55e' },
+    { min: 350, name: '专科院校', level: 'D', color: '#f59e0b' },
+    { min: 250, name: '民办专科', level: 'E', color: '#f97316' },
+    { min: 0, name: '复读 / 落榜', level: 'F', color: '#ef4444' },
+  ],
+};
+// 高考评分波动：在熟练度比例基础上再叠加一次随机
+export const GAOKAO_LUCK = 0.12;
