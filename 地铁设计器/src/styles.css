@@ -188,3 +188,17 @@ body {
   color: var(--text); font: inherit; font-size: 12px; padding: 7px; cursor: pointer;
 }
 .save-io button:hover { border-color: var(--accent); }
+
+/* v2 追加 */
+.metro-text { cursor: grab; user-select: none; }
+.metro-station { transition: fill-opacity .12s; }
+.metro-station:hover { fill-opacity: .82; }
+.inspector { width: 320px; }
+.inspector-tabs button { font-size: 12px; padding: 9px 4px; }
+.panel-body textarea {
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text); font: inherit; font-size: 13px; padding: 7px 9px; resize: vertical; width: 100%;
+}
+.pos-grid { grid-template-columns: repeat(3, 1fr); }
+.line-chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.canvas-scroll { padding: 24px; }

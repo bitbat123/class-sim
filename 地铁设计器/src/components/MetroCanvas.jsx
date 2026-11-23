@@ -2,14 +2,14 @@ import React from 'react';
 import { autoLabelPos } from '../model.js';
 
 /**
- * 线路画布（SVG）。
- * - 站点是圆点，换乘站画成白底黑圈
- * - 线路按 stationIds 顺序连线，支持折线拐角圆角
- * - 线宽、颜色、花纹可编辑
- * - 站名标签可放 8 个方向，也可用自定义偏移
+ * 线路画布（SVG）v2。
+ * - 站点支持 4 种形状、独立字号、标签 8 方向 / 自定义偏移 / 旋转
+ * - 线路支持环线（首尾相连）、平滑曲线、透明度、7 种花纹
+ * - 文字标注可拖动
+ * - 背景支持透明度、缩放、平移
  */
 
-const WRAP = 8;   // 站名换行宽度（字符数）
+const WRAP = 7;   // 站名换行宽度（中文字符数）
 
 function wrapText(text, perLine = WRAP) {
   if (!text) return [];
@@ -18,17 +18,15 @@ function wrapText(text, perLine = WRAP) {
   return out;
 }
 
-/** 计算线宽对应的描边定义 */
+/** 花纹 → SVG 描边属性 */
 function patternProps(pattern, width, color, id) {
   switch (pattern) {
     case 'dashed':
       return { stroke: color, strokeWidth: width, strokeDasharray: `${width * 2} ${width * 1.2}` };
     case 'dotted':
-      return { stroke: color, strokeWidth: width, strokeDasharray: `${width * 0.1} ${width * 1.1}`, strokeLinecap: 'round' };
+      return { stroke: color, strokeWidth: width, strokeDasharray: `${Math.max(0.1, width * 0.1)} ${width * 1.1}`, strokeLinecap: 'round' };
     case 'dashdot':
       return { stroke: color, strokeWidth: width, strokeDasharray: `${width * 2.2} ${width} ${width * 0.1} ${width}` };
-    case 'double':
-      return { stroke: color, strokeWidth: width };
     case 'stripe':
       return { stroke: `url(#${id}-stripe)`, strokeWidth: width };
     case 'zigzag':
@@ -38,52 +36,96 @@ function patternProps(pattern, width, color, id) {
   }
 }
 
-/** 把相邻站点连成一条带圆角的折线路径 */
-function polylinePath(points, radius = 14) {
-  if (points.length < 2) return '';
-  if (points.length === 2) {
-    return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`;
-  }
-  let d = `M ${points[0].x} ${points[0].y}`;
-  for (let i = 1; i < points.length - 1; i++) {
-    const prev = points[i - 1];
-    const cur = points[i];
-    const next = points[i + 1];
+/** 生成路径：curve=0 时用折角，>0 时用平滑曲线 */
+function linePath(points, { loop = false, curve = 0 } = {}) {
+  const pts = loop && points.length >= 3 ? [...points, points[0]] : points;
+  if (pts.length < 2) return '';
 
+  if (curve > 0) {
+    const k = Math.min(1, curve) * 0.5;
+    let d = `M ${pts[0].x} ${pts[0].y}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i - 1] || pts[i];
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const p3 = pts[i + 2] || p2;
+      const c1x = p1.x + (p2.x - p0.x) * k;
+      const c1y = p1.y + (p2.y - p0.y) * k;
+      const c2x = p2.x - (p3.x - p1.x) * k;
+      const c2y = p2.y - (p3.y - p1.y) * k;
+      d += ` C ${c1x} ${c1y} ${c2x} ${c2y} ${p2.x} ${p2.y}`;
+    }
+    if (loop) d += ' Z';
+    return d;
+  }
+
+  const radius = 14;
+  if (pts.length === 2) return `M ${pts[0].x} ${pts[0].y} L ${pts[1].x} ${pts[1].y}`;
+
+  let d = `M ${pts[0].x} ${pts[0].y}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const prev = pts[i - 1];
+    const cur = pts[i];
+    const next = pts[i + 1];
     const v1 = { x: cur.x - prev.x, y: cur.y - prev.y };
     const v2 = { x: next.x - cur.x, y: next.y - cur.y };
     const l1 = Math.hypot(v1.x, v1.y) || 1;
     const l2 = Math.hypot(v2.x, v2.y) || 1;
     const r = Math.min(radius, l1 / 2, l2 / 2);
-
-    const p1 = { x: cur.x - (v1.x / l1) * r, y: cur.y - (v1.y / l1) * r };
-    const p2 = { x: cur.x + (v2.x / l2) * r, y: cur.y + (v2.y / l2) * r };
-    d += ` L ${p1.x} ${p1.y} Q ${cur.x} ${cur.y} ${p2.x} ${p2.y}`;
+    const a = { x: cur.x - (v1.x / l1) * r, y: cur.y - (v1.y / l1) * r };
+    const b = { x: cur.x + (v2.x / l2) * r, y: cur.y + (v2.y / l2) * r };
+    d += ` L ${a.x} ${a.y} Q ${cur.x} ${cur.y} ${b.x} ${b.y}`;
   }
-  const last = points[points.length - 1];
+  const last = pts[pts.length - 1];
   d += ` L ${last.x} ${last.y}`;
+  if (loop) d += ' Z';
   return d;
 }
 
-/** 站名的锚点与对齐方式 */
+/** 站名锚点 */
 function labelAnchor(pos, dx, dy) {
   const OFF = 16;
   switch (pos) {
-    case 'top': return { x: 0, y: -OFF, anchor: 'middle', base: 'auto' };
-    case 'bottom': return { x: 0, y: OFF + 12, anchor: 'middle', base: 'auto' };
-    case 'left': return { x: -OFF, y: 4, anchor: 'end', base: 'auto' };
-    case 'right': return { x: OFF, y: 4, anchor: 'start', base: 'auto' };
-    case 'topleft': return { x: -OFF, y: -OFF, anchor: 'end', base: 'auto' };
-    case 'topright': return { x: OFF, y: -OFF, anchor: 'start', base: 'auto' };
-    case 'bottomleft': return { x: -OFF, y: OFF + 12, anchor: 'end', base: 'auto' };
-    case 'bottomright': return { x: OFF, y: OFF + 12, anchor: 'start', base: 'auto' };
-    case 'custom': return { x: dx, y: dy, anchor: dx >= 0 ? 'start' : 'end', base: 'auto' };
-    default: return { x: OFF, y: 4, anchor: 'start', base: 'auto' };
+    case 'top': return { x: 0, y: -OFF, anchor: 'middle' };
+    case 'bottom': return { x: 0, y: OFF + 12, anchor: 'middle' };
+    case 'left': return { x: -OFF, y: 4, anchor: 'end' };
+    case 'right': return { x: OFF, y: 4, anchor: 'start' };
+    case 'topleft': return { x: -OFF, y: -OFF, anchor: 'end' };
+    case 'topright': return { x: OFF, y: -OFF, anchor: 'start' };
+    case 'bottomleft': return { x: -OFF, y: OFF + 12, anchor: 'end' };
+    case 'bottomright': return { x: OFF, y: OFF + 12, anchor: 'start' };
+    case 'custom': return { x: dx, y: dy, anchor: dx >= 0 ? 'start' : 'end' };
+    default: return { x: OFF, y: 4, anchor: 'start' };
+  }
+}
+
+/** 站点形状渲染 */
+function StationShape({ st, r, fill, stroke, strokeWidth }) {
+  const common = { fill, stroke, strokeWidth, style: { cursor: 'grab' }, className: 'metro-station' };
+  switch (st.shape) {
+    case 'square': {
+      const s = r * 1.7;
+      return <rect x={st.x - s / 2} y={st.y - s / 2} width={s} height={s} rx={2} {...common} />;
+    }
+    case 'diamond': {
+      const s = r * 1.5;
+      const pts = `${st.x},${st.y - s} ${st.x + s},${st.y} ${st.x},${st.y + s} ${st.x - s},${st.y}`;
+      return <polygon points={pts} {...common} />;
+    }
+    case 'pill': {
+      const w = r * 3.6;
+      const h = r * 1.7;
+      return <rect x={st.x - w / 2} y={st.y - h / 2} width={w} height={h} rx={h / 2} {...common} />;
+    }
+    default:
+      return <circle cx={st.x} cy={st.y} r={r} {...common} />;
   }
 }
 
 export default function MetroCanvas({
-  doc, selectedStation, selectedLine, onPickStation, onPickLine, onMoveStation, background, zoom, onCanvasClick,
+  doc, selectedStation, selectedLine, selectedText,
+  onPickStation, onPickLine, onPickText, onMoveStation, onMoveText,
+  background, zoom, onCanvasClick,
 }) {
   const { width, height } = doc.canvas;
   const stationById = React.useMemo(
@@ -91,7 +133,6 @@ export default function MetroCanvas({
     [doc.stations],
   );
 
-  // 每个站被哪些线路使用（决定是否换乘、以及自动标签方向）
   const stationLines = React.useMemo(() => {
     const map = new Map();
     for (const line of doc.lines) {
@@ -105,31 +146,49 @@ export default function MetroCanvas({
 
   const dragRef = React.useRef(null);
 
-  const onPointerDown = (e, st) => {
-    if (e.button !== 0) return;
-    onPickStation?.(st.id);
-    const svg = e.currentTarget.ownerSVGElement;
+  const toLocal = (svg, clientX, clientY) => {
     const pt = svg.createSVGPoint();
-    pt.x = e.clientX;
-    pt.y = e.clientY;
-    const local = pt.matrixTransform(svg.getScreenCTM().inverse());
-    dragRef.current = { id: st.id, dx: st.x - local.x, dy: st.y - local.y, moved: false };
+    pt.x = clientX;
+    pt.y = clientY;
+    return pt.matrixTransform(svg.getScreenCTM().inverse());
+  };
+
+  const startDrag = (e, kind, id, obj) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    const svg = e.currentTarget.ownerSVGElement || e.currentTarget;
+    const local = toLocal(svg, e.clientX, e.clientY);
+    dragRef.current = {
+      kind, id,
+      dx: obj.x - local.x,
+      dy: obj.y - local.y,
+      snap: doc.canvas.snap || 0,
+    };
+    if (kind === 'station') onPickStation?.(id);
+    if (kind === 'text') onPickText?.(id);
     e.currentTarget.setPointerCapture?.(e.pointerId);
   };
 
   const onPointerMove = (e) => {
-    if (!dragRef.current) return;
-    const svg = e.currentTarget.ownerSVGElement || e.currentTarget;
+    const drag = dragRef.current;
+    if (!drag) return;
+    const svg = e.currentTarget;
     if (!svg.createSVGPoint) return;
-    const pt = svg.createSVGPoint();
-    pt.x = e.clientX;
-    pt.y = e.clientY;
-    const local = pt.matrixTransform(svg.getScreenCTM().inverse());
-    dragRef.current.moved = true;
-    onMoveStation?.(dragRef.current.id, local.x + dragRef.current.dx, local.y + dragRef.current.dy);
+    const local = toLocal(svg, e.clientX, e.clientY);
+    let x = local.x + drag.dx;
+    let y = local.y + drag.dy;
+    if (drag.snap > 0 && !e.altKey) {
+      x = Math.round(x / drag.snap) * drag.snap;
+      y = Math.round(y / drag.snap) * drag.snap;
+    }
+    if (drag.kind === 'station') onMoveStation?.(drag.id, x, y);
+    else if (drag.kind === 'text') onMoveText?.(drag.id, x, y);
   };
 
   const onPointerUp = () => { dragRef.current = null; };
+
+  const bg = doc.canvas.background;
+  const bgOpacity = bg.opacity ?? 1;
 
   return (
     <svg
@@ -161,33 +220,32 @@ export default function MetroCanvas({
         ))}
       </defs>
 
-      {/* 背景 */}
-      <rect width={width} height={height} fill={doc.canvas.background.type === 'white' ? '#ffffff' : '#f8fafc'} />
+      <rect width={width} height={height} fill={bg.type === 'white' ? '#ffffff' : '#f8fafc'} />
 
       {background && background.paths && (
-        <g className="metro-bg">
+        <g className="metro-bg" opacity={bgOpacity}>
           {background.paths.map((ring, i) => (
             <path
               key={i}
               d={ring.map(([x, y], j) => `${j === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`).join(' ') + ' Z'}
-              fill="rgba(148,163,184,0.13)"
-              stroke="rgba(100,116,139,0.45)"
-              strokeWidth="1.2"
+              fill="rgba(148,163,184,0.16)"
+              stroke="rgba(71,85,105,0.5)"
+              strokeWidth="1"
             />
           ))}
-          {doc.canvas.background.type === 'china' && background.names && background.names.map((n, i) => (
-            <text key={i} x={n.x} y={n.y} className="metro-bg-name">{n.name}</text>
+          {bg.showNames && background.names && background.names.filter((n) => n.visible).map((n, i) => (
+            <text key={i} x={n.x} y={n.y} className="metro-bg-name" opacity={Math.min(1, bgOpacity * 1.6)}>{n.name}</text>
           ))}
         </g>
       )}
 
       {doc.canvas.showGrid && (
-        <g opacity="0.16">
-          {Array.from({ length: Math.floor(width / 80) }, (_, i) => (
-            <line key={`v${i}`} x1={i * 80} y1={0} x2={i * 80} y2={height} stroke="#94a3b8" strokeWidth="1" />
+        <g opacity="0.14">
+          {Array.from({ length: Math.floor(width / (doc.canvas.gridSize || 80)) + 1 }, (_, i) => (
+            <line key={`v${i}`} x1={i * doc.canvas.gridSize} y1={0} x2={i * doc.canvas.gridSize} y2={height} stroke="#94a3b8" strokeWidth="1" />
           ))}
-          {Array.from({ length: Math.floor(height / 80) }, (_, i) => (
-            <line key={`h${i}`} x1={0} y1={i * 80} x2={width} y2={i * 80} stroke="#94a3b8" strokeWidth="1" />
+          {Array.from({ length: Math.floor(height / (doc.canvas.gridSize || 80)) + 1 }, (_, i) => (
+            <line key={`h${i}`} x1={0} y1={i * doc.canvas.gridSize} x2={width} y2={i * doc.canvas.gridSize} stroke="#94a3b8" strokeWidth="1" />
           ))}
         </g>
       )}
@@ -198,15 +256,41 @@ export default function MetroCanvas({
         if (pts.length < 2) return null;
         const props = patternProps(line.pattern, line.width, line.color, line.id);
         const isSel = selectedLine === line.id;
+        const d = linePath(pts, { loop: line.loop, curve: line.curve });
         return (
-          <g key={line.id} className="metro-line" onClick={(e) => { e.stopPropagation(); onPickLine?.(line.id); }}>
+          <g key={line.id} className="metro-line" opacity={line.opacity ?? 1} onClick={(e) => { e.stopPropagation(); onPickLine?.(line.id); }}>
             {isSel && (
-              <path d={polylinePath(pts)} fill="none" stroke={line.color} strokeWidth={line.width + 8} opacity="0.22" strokeLinejoin="round" strokeLinecap="round" />
+              <path d={d} fill="none" stroke={line.color} strokeWidth={line.width + 8} opacity="0.2" strokeLinejoin="round" strokeLinecap="round" />
             )}
-            <path d={polylinePath(pts)} fill="none" {...props} strokeLinejoin="round" strokeLinecap="round" style={{ cursor: 'pointer' }} />
+            <path d={d} fill="none" {...props} strokeLinejoin="round" strokeLinecap="round" style={{ cursor: 'pointer' }} />
           </g>
         );
       })}
+
+      {/* 文字标注 */}
+      {doc.texts.map((t) => (
+        <g key={t.id}>
+          {selectedText === t.id && (
+            <rect
+              x={t.x - 6} y={t.y - t.size} width={Math.max(30, t.text.length * t.size * 0.75) + 12} height={t.size * 1.6}
+              fill="none" stroke="#f59e0b" strokeWidth="2" strokeDasharray="6 4" rx="4"
+            />
+          )}
+          <text
+            x={t.x}
+            y={t.y}
+            fontSize={t.size}
+            fontWeight={t.weight}
+            fill={t.color}
+            textAnchor={t.align === 'center' ? 'middle' : t.align === 'right' ? 'end' : 'start'}
+            transform={t.rotate ? `rotate(${t.rotate} ${t.x} ${t.y})` : undefined}
+            className="metro-text"
+            onPointerDown={(e) => startDrag(e, 'text', t.id, t)}
+          >
+            {t.text}
+          </text>
+        </g>
+      ))}
 
       {/* 站点 */}
       {doc.stations.map((st) => {
@@ -225,32 +309,33 @@ export default function MetroCanvas({
         const pos = st.labelPos === 'auto' ? autoLabelPos(st, neighbors) : st.labelPos;
         const a = labelAnchor(pos, st.labelDx, st.labelDy);
         const labelLines = wrapText(st.name);
+        const r = isInterchange ? 9 : 7;
+        const mainColor = lines[0] ? (doc.lines.find((l) => l.id === lines[0])?.color || '#0f172a') : '#0f172a';
 
         return (
           <g key={st.id}>
-            {isSel && <circle cx={st.x} cy={st.y} r={17} fill="none" stroke="#f59e0b" strokeWidth="3" />}
-            <circle
-              cx={st.x}
-              cy={st.y}
-              r={isInterchange ? 9 : 7}
-              fill={isInterchange ? '#ffffff' : (lines[0] ? (doc.lines.find((l) => l.id === lines[0])?.color || '#0f172a') : '#0f172a')}
-              stroke={isInterchange ? '#0f172a' : '#ffffff'}
-              strokeWidth={isInterchange ? 3.5 : 2}
-              style={{ cursor: 'grab' }}
-              onPointerDown={(e) => onPointerDown(e, st)}
-              onClick={(e) => { e.stopPropagation(); onPickStation?.(st.id); }}
-            />
+            {isSel && <circle cx={st.x} cy={st.y} r={18} fill="none" stroke="#f59e0b" strokeWidth="3" />}
+            <g onPointerDown={(e) => startDrag(e, 'station', st.id, st)} onClick={(e) => { e.stopPropagation(); onPickStation?.(st.id); }}>
+              <StationShape
+                st={st}
+                r={r}
+                fill={isInterchange ? '#ffffff' : mainColor}
+                stroke={isInterchange ? '#0f172a' : '#ffffff'}
+                strokeWidth={isInterchange ? 3.5 : 2}
+              />
+            </g>
             {st.name && (
               <text
                 x={st.x + a.x}
                 y={st.y + a.y}
                 textAnchor={a.anchor}
+                fontSize={st.fontSize}
+                transform={st.rotate ? `rotate(${st.rotate} ${st.x + a.x} ${st.y + a.y})` : undefined}
                 className={`metro-label ${st.open ? '' : 'closed'}`}
-                style={{ cursor: 'pointer' }}
                 onClick={(e) => { e.stopPropagation(); onPickStation?.(st.id); }}
               >
                 {labelLines.map((ln, i) => (
-                  <tspan key={i} x={st.x + a.x} dy={i === 0 ? 0 : 14}>{ln}</tspan>
+                  <tspan key={i} x={st.x + a.x} dy={i === 0 ? 0 : st.fontSize * 1.15}>{ln}</tspan>
                 ))}
               </text>
             )}
