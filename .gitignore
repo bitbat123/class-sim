@@ -1,4 +1,15 @@
+主页/
 
-��ҳ/
+# 依赖与构建产物（由 CI 重新安装/构建）
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+site/
 
-��ҳ/
+# 日志与临时文件
+*.log
+*.tmp
+*.tmpdir/
+.DS_Store
+Thumbs.db
