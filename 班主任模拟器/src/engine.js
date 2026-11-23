@@ -756,6 +756,8 @@ export function gameReducer(state, action) {
   if (action.type === 'RESET') return null;
   if (action.type === 'DISMISS_EXAM') return state; // 考试弹窗是纯界面状态
   if (action.type === 'DISMISS_GAOKAO') return state ? { ...state, gaokaoDismissed: true } : state;
+  // 读取存档：直接用存档里的状态替换当前状态
+  if (action.type === 'LOAD_SAVE') return action.payload ? { ...action.payload } : state;
   const cur = state && state.mode === undefined ? migrateState(state) : state;
   if (!cur) return cur;
   switch (action.type) {

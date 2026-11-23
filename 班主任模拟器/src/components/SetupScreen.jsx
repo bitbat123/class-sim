@@ -2,13 +2,14 @@ import React, { useState, useMemo } from 'react';
 import { SYSTEMS, DIFFICULTY, MODES, TIME_SCALE } from '../constants.js';
 import { parseNames } from '../engine.js';
 import { DEFAULT_SERVER_URL } from '../net/useRoom.js';
+import { listSaves, loadFrom, timeAgo, SLOT_LABELS } from '../save.js';
 
 /**
  * 开局设置：学制、时长模式、难度、人数、姓名。
  * 支持两种入口：单机（本地 reducer）与联机（连接房间，服务端结算）。
  * net 为 useRoom() 的返回值；联机时开局按钮会把意图发给服务端。
  */
-export default function SetupScreen({ onStart, net }) {
+export default function SetupScreen({ onStart, net, onLoadSave }) {
   const [system, setSystem] = useState('63');
   const [mode, setMode] = useState('full');
   const [difficulty, setDifficulty] = useState('normal');
@@ -174,7 +175,54 @@ export default function SetupScreen({ onStart, net }) {
         >
           {online && myPlayer?.state ? '已开局，等待服务端同步…' : '🚀 开始班级生活'}
         </button>
+
+        {!online && <SaveSlots onLoad={onLoadSave} />}
       </div>
+    </div>
+  );
+}
+
+/** 开局页的存档列表：显示已有存档，可一键读取继续 */
+function SaveSlots({ onLoad }) {
+  const [items, setItems] = React.useState(() => listSaves());
+  const [confirmSlot, setConfirmSlot] = React.useState(null);
+  const refresh = () => setItems(listSaves());
+  const available = items.filter((it) => it.meta);
+
+  if (!available.length) return null;
+
+  const read = (slot) => {
+    const s = loadFrom(slot);
+    if (!s) return;
+    setConfirmSlot(null);
+    onLoad?.(s.state);
+  };
+
+  return (
+    <div className="save-slots">
+      <div className="save-slots-head">
+        <b>💾 继续之前的存档</b>
+        <button className="btn-small" onClick={refresh}>刷新</button>
+      </div>
+      {available.map((it) => (
+        <div key={it.slot} className="save-slot-wrap">
+          {confirmSlot === it.slot ? (
+            <div className="save-slot-confirm">
+              <span>读取「{it.label}」并继续这一局？</span>
+              <button className="btn-small" onClick={() => read(it.slot)}>确定读取</button>
+              <button className="btn-small" onClick={() => setConfirmSlot(null)}>取消</button>
+            </div>
+          ) : (
+            <button className="save-slot-row" onClick={() => setConfirmSlot(it.slot)}>
+              <span className="save-slot-name">{it.label}</span>
+              <span className="muted small">
+                {it.meta.title} · {it.meta.students} 人 · 第 {it.meta.week}/{it.meta.totalWeeks} 周
+              </span>
+              <span className="muted small">{timeAgo(it.savedAt)}</span>
+            </button>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

@@ -13,6 +13,8 @@ import PeerPanel from './components/PeerPanel.jsx';
 import { useRoom } from './net/useRoom.js';
 import { scoreColor } from './components/colors.js';
 import GaokaoResult from './components/GaokaoResult.jsx';
+import SavePanel from './components/SavePanel.jsx';
+import { saveTo } from './save.js';
 import { THEMES, THEME_BY_ID } from './themes.js';
 
 const newSeed = () => Math.floor(Math.random() * 4294967296);
@@ -61,7 +63,24 @@ export default function App() {
     setSelectedExam(null);
   };
 
-  if (!state) return <SetupScreen onStart={start} net={net} />;
+  // 自动存档：每周推进后写一份到 auto 槽位（仅单机，已毕业不再覆盖）
+  useEffect(() => {
+    if (!state || net.online || state.finished) return;
+    if (!state.absWeek) return;
+    saveTo('auto', state);
+  }, [state?.absWeek]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!state) {
+    return (
+      <SetupScreen
+        onStart={start}
+        net={net}
+        onLoadSave={(saved) => {
+          net.online ? null : dispatch({ type: 'LOAD_SAVE', payload: saved });
+          setTab('students');
+        }}
+      />
+    );
+  }
 
   const stats = classStats(state);
   const exam = selectedExam
@@ -143,6 +162,14 @@ export default function App() {
 
         </aside>
       </main>
+
+      {!net.online && (
+        <SavePanel
+          state={state}
+          online={net.online}
+          onLoad={(saved) => dispatch({ type: 'LOAD_SAVE', payload: saved })}
+        />
+      )}
 
       {popupExam && (
         <ExamPopup
