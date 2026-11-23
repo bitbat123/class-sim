@@ -202,3 +202,15 @@ body {
 .pos-grid { grid-template-columns: repeat(3, 1fr); }
 .line-chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .canvas-scroll { padding: 24px; }
+
+/* 街道级瓦片 */
+.bg-swatch.tiles { background: linear-gradient(135deg, #bfdbfe 0%, #86efac 50%, #fde68a 100%); }
+.bg-opt.tiny { font-size: 11px; padding: 5px 8px; opacity: .85; }
+.tile-zoom { display: flex; flex-direction: column; gap: 4px; }
+.tile-zoom label { font-size: 12px; color: var(--muted); }
+.tile-zoom-btn {
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 7px;
+  color: var(--text); font: inherit; font-size: 12px; padding: 5px 8px; cursor: pointer; text-align: left;
+}
+.tile-zoom-btn.on { background: rgba(139, 92, 246, 0.28); border-color: var(--accent); }
+.tile-layer image { image-rendering: auto; }

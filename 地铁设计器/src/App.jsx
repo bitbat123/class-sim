@@ -6,6 +6,7 @@ import {
   createDoc, createDemoDoc, normalizeDoc, newStation, newLine, newText, saveDoc, loadDoc,
 } from './model.js';
 import { CITIES, CHINA_CODE } from './cities.js';
+import { ZOOM_HINTS } from './tiles.js';
 import { loadBackground, fitToCanvas } from './background.js';
 
 /** 导出当前画布为 SVG 字符串（含背景） */
@@ -51,7 +52,7 @@ export default function App() {
   const bgType = doc.canvas.background.type;
   const bgCode = doc.canvas.background.cityCode || city;
   useEffect(() => {
-    if (bgType === 'white') { setBgState({ status: 'ready', data: null, error: null }); return; }
+    if (bgType === 'white' || bgType === 'tiles') { setBgState({ status: 'ready', data: null, error: null }); return; }
     const code = bgType === 'china' ? CHINA_CODE : bgCode;
     let alive = true;
     setBgState({ status: 'loading', data: null, error: null });
@@ -386,7 +387,13 @@ export default function App() {
           city={city}
           setCity={setCity}
           onChange={(t) => updateBackground({ type: t })}
-          onPickCity={(code) => updateBackground({ type: 'city', cityCode: code })}
+          onTileZoom={(z) => updateBackground({ type: 'tiles', tileZoom: z })}
+          onPickCity={(code, c, t) => updateBackground({
+            type: 'city',
+            cityCode: code,
+            centerLon: c.lon,
+            centerLat: c.lat,
+          })}
           status={bgState}
         />
 
@@ -440,8 +447,11 @@ export default function App() {
   );
 }
 
-function BackgroundPicker({ doc, city, setCity, onChange, onPickCity, status }) {
+function BackgroundPicker({ doc, city, setCity, onChange, onPickCity, onTileZoom, status }) {
   const type = doc.canvas.background.type;
+  const bg = doc.canvas.background;
+  const curCity = CITIES.find((c) => c.code === (bg.cityCode || city)) || CITIES[0];
+
   return (
     <aside className="bg-picker">
       <h3>背景</h3>
@@ -451,23 +461,54 @@ function BackgroundPicker({ doc, city, setCity, onChange, onPickCity, status }) 
         白色画布
       </button>
 
-      <button className={`bg-opt ${type === 'city' ? 'on' : ''}`} onClick={() => onChange('city')}>
-        <span className="bg-swatch city" />
-        中国城市
+      <button className={`bg-opt ${type === 'tiles' ? 'on' : ''}`} onClick={() => onChange('tiles')}>
+        <span className="bg-swatch tiles" />
+        街道级地图
       </button>
 
-      {type === 'city' && (
-        <select
-          value={doc.canvas.background.cityCode || city}
-          onChange={(e) => {
-            setCity(e.target.value);
-            onPickCity(e.target.value);
-          }}
-          aria-label="选择城市"
-        >
-          {CITIES.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
-        </select>
+      {(type === 'tiles' || type === 'city') && (
+        <>
+          <select
+            value={bg.cityCode || city}
+            onChange={(e) => {
+              const code = e.target.value;
+              const c = CITIES.find((x) => x.code === code) || CITIES[0];
+              setCity(code);
+              onPickCity(code, c, type);
+            }}
+            aria-label="选择城市"
+          >
+            {CITIES.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
+          </select>
+        </>
       )}
+
+      {type === 'tiles' && (
+        <>
+          <div className="tile-zoom">
+            <label>详细程度</label>
+            {ZOOM_HINTS.map((h) => (
+              <button
+                key={h.z}
+                className={`tile-zoom-btn ${Math.round(bg.tileZoom) === h.z ? 'on' : ''}`}
+                onClick={() => onTileZoom(h.z)}
+              >
+                {h.label}
+              </button>
+            ))}
+          </div>
+          <p className="muted small">
+            当前 z={Math.round(bg.tileZoom)}（{ZOOM_HINTS.find((h) => h.z === Math.round(bg.tileZoom))?.km || ''}）
+            · 中心 {curCity.lon.toFixed(3)}, {curCity.lat.toFixed(3)}
+          </p>
+          <button className="bg-opt tiny" onClick={() => onChange('white')}>切回白纸（省流量）</button>
+        </>
+      )}
+
+      <button className={`bg-opt ${type === 'city' ? 'on' : ''}`} onClick={() => onChange('city')}>
+        <span className="bg-swatch city" />
+        区县轮廓
+      </button>
 
       <button className={`bg-opt ${type === 'china' ? 'on' : ''}`} onClick={() => onChange('china')}>
         <span className="bg-swatch china" />
@@ -476,7 +517,7 @@ function BackgroundPicker({ doc, city, setCity, onChange, onPickCity, status }) 
 
       {status.status === 'loading' && <p className="muted small">地图加载中…</p>}
       {status.status === 'error' && <p className="err-line small">{status.error}</p>}
-      {type !== 'white' && status.status === 'ready' && status.detail && (
+      {(type === 'city' || type === 'china') && status.status === 'ready' && status.detail && (
         <p className="muted small">{status.detail}</p>
       )}
       <p className="muted small">提示：点「适应」让整张图进入视野；画布尺寸可在右侧「画布」调大。</p>

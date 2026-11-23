@@ -100,14 +100,20 @@ export function createDoc(name = '未命名线路网') {
       width: 2400,
       height: 1600,
       background: {
-        type: 'white',
+        type: 'white',      // white | city | china | tiles
         cityCode: '310000',
         opacity: 1,
         scale: 1,
         offsetX: 0,
         offsetY: 0,
         showNames: true,
-        fit: 'contain',   // contain | cover | manual
+        fit: 'contain',     // contain | cover | manual
+        // ---- 街道级瓦片 ----
+        tileZoom: 15,
+        tileScale: 1,
+        centerLon: 121.4737,
+        centerLat: 31.2304,
+        tileOpacity: 1,
       },
       showGrid: true,
       gridSize: 80,
@@ -135,7 +141,7 @@ export function normalizeDoc(doc) {
       width: Number(doc.canvas?.width) || 2400,
       height: Number(doc.canvas?.height) || 1600,
       background: {
-        type: ['white', 'city', 'china'].includes(bgIn.type) ? bgIn.type : 'white',
+        type: ['white', 'city', 'china', 'tiles'].includes(bgIn.type) ? bgIn.type : 'white',
         cityCode: bgIn.cityCode || '310000',
         opacity: typeof bgIn.opacity === 'number' ? bgIn.opacity : 1,
         scale: typeof bgIn.scale === 'number' ? bgIn.scale : 1,
@@ -143,6 +149,11 @@ export function normalizeDoc(doc) {
         offsetY: Number(bgIn.offsetY) || 0,
         showNames: bgIn.showNames !== false,
         fit: ['contain', 'cover', 'manual'].includes(bgIn.fit) ? bgIn.fit : 'contain',
+        tileZoom: Number(bgIn.tileZoom) || 15,
+        tileScale: Number(bgIn.tileScale) || 1,
+        centerLon: Number.isFinite(Number(bgIn.centerLon)) ? Number(bgIn.centerLon) : 121.4737,
+        centerLat: Number.isFinite(Number(bgIn.centerLat)) ? Number(bgIn.centerLat) : 31.2304,
+        tileOpacity: typeof bgIn.tileOpacity === 'number' ? bgIn.tileOpacity : 1,
       },
       showGrid: doc.canvas?.showGrid !== false,
       gridSize: Number(doc.canvas?.gridSize) || 80,
@@ -233,6 +244,7 @@ export function describe(doc) {
     lines: doc.lines.length,
     stations: doc.stations.length,
     bg,
+    tileZoom: doc.canvas?.background?.tileZoom || 0,
     size: `${doc.canvas.width}×${doc.canvas.height}`,
   };
 }

@@ -1,5 +1,6 @@
 import React from 'react';
 import { autoLabelPos } from '../model.js';
+import TileLayer from './TileLayer.jsx';
 
 /**
  * 线路画布（SVG）v2。
@@ -221,6 +222,11 @@ export default function MetroCanvas({
       </defs>
 
       <rect width={width} height={height} fill={bg.type === 'white' ? '#ffffff' : '#f8fafc'} />
+
+      {/* 街道级瓦片底图 */}
+      {bg.type === 'tiles' && (
+        <TileLayer bg={bg} canvasW={width} canvasH={height} />
+      )}
 
       {background && background.paths && (
         <g className="metro-bg" opacity={bgOpacity}>

@@ -342,10 +342,34 @@ function CanvasPanel({ doc, onUpdateCanvas, onUpdateBackground, city, setCity, b
       <div className="panel-sep" />
       <label>背景类型</label>
       <div className="pos-grid">
-        {[['white', '白纸'], ['city', '城市'], ['china', '全国']].map(([v, n]) => (
+        {[['white', '白纸'], ['tiles', '街道'], ['city', '区县'], ['china', '全国']].map(([v, n]) => (
           <button key={v} className={`pos-btn ${bg.type === v ? 'on' : ''}`} onClick={() => setBg('type', v)}>{n}</button>
         ))}
       </div>
+
+      {bg.type === 'tiles' && (
+        <>
+          <label>瓦片详细度 z={Math.round(bg.tileZoom)}</label>
+          <input type="range" min={10} max={18} step={1} value={bg.tileZoom} onChange={(e) => setBg('tileZoom', Number(e.target.value))} />
+
+          <label>瓦片大小：{Math.round((bg.tileScale || 1) * 100)}%</label>
+          <input type="range" min={0.5} max={3} step={0.1} value={bg.tileScale || 1} onChange={(e) => setBg('tileScale', Number(e.target.value))} />
+
+          <label>瓦片不透明度：{Math.round((bg.tileOpacity ?? 1) * 100)}%</label>
+          <input type="range" min={0.1} max={1} step={0.05} value={bg.tileOpacity ?? 1} onChange={(e) => setBg('tileOpacity', Number(e.target.value))} />
+
+          <div className="row-2">
+            <div>
+              <label>中心经度</label>
+              <input type="number" step="0.001" value={bg.centerLon} onChange={(e) => setBg('centerLon', Number(e.target.value))} />
+            </div>
+            <div>
+              <label>中心纬度</label>
+              <input type="number" step="0.001" value={bg.centerLat} onChange={(e) => setBg('centerLat', Number(e.target.value))} />
+            </div>
+          </div>
+        </>
+      )}
 
       {bg.type === 'city' && (
         <>
@@ -359,7 +383,7 @@ function CanvasPanel({ doc, onUpdateCanvas, onUpdateBackground, city, setCity, b
         </>
       )}
 
-      {bg.type !== 'white' && (
+      {(bg.type === 'city' || bg.type === 'china') && (
         <>
           <label>背景不透明度：{Math.round((bg.opacity ?? 1) * 100)}%</label>
           <input type="range" min={0.05} max={1} step={0.05} value={bg.opacity ?? 1} onChange={(e) => setBg('opacity', Number(e.target.value))} />
