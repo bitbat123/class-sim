@@ -1,5 +1,5 @@
-// 背景地图：从阿里云 DataV 拉取行政区划 GeoJSON，投影到画布坐标。
-// 数据来源 https://geo.datav.aliyun.com/areas_v3/bound/<adcode>.json（带 CORS，可直接前端请求）
+// 背景地图：优先读本地 public/geo 下的精简 GeoJSON（构建时用 scripts/fetch-geo.mjs 生成），
+// 本地没有时才回退到阿里云 DataV（线上会被防盗链 403，所以只作兜底）。
 import { CHINA_CODE } from './cities.js';
 
 const cache = new Map();   // adcode -> { paths, bounds }
@@ -47,6 +47,22 @@ function extractNames(geojson) {
     .filter((x) => x.name && x.center);
 }
 
+/** 取 GeoJSON：先本地打包数据，失败再回退 DataV */
+async function fetchGeo(code) {
+  const local = `${import.meta.env.BASE_URL}geo/${code}.json`;
+  try {
+    const res = await fetch(local);
+    if (res.ok) return await res.json();
+  } catch { /* 继续回退 */ }
+
+  const remote = code === CHINA_CODE
+    ? `https://geo.datav.aliyun.com/areas_v3/bound/${CHINA_CODE}_full.json`
+    : `https://geo.datav.aliyun.com/areas_v3/bound/${code}.json`;
+  const res = await fetch(remote, { referrerPolicy: 'no-referrer' });
+  if (!res.ok) throw new Error(`地图数据加载失败（${res.status}），请检查 public/geo 是否有 ${code}.json`);
+  return res.json();
+}
+
 /**
  * 加载背景数据，返回可直接绘制的路径（已投影到 0..1 的归一化坐标）。
  * @param {string} code adcode，例如 '310000'；'100000' 表示全国
@@ -55,11 +71,7 @@ export async function loadBackground(code) {
   const key = code === CHINA_CODE ? CHINA_CODE : code;
   if (cache.has(key)) return cache.get(key);
 
-  // 中国全图用 _full 版本，才能拿到省级边界与省名；城市用普通版本（市级轮廓）
-  const file = key === CHINA_CODE ? `${CHINA_CODE}_full` : key;
-  const res = await fetch(`https://geo.datav.aliyun.com/areas_v3/bound/${file}.json`);
-  if (!res.ok) throw new Error(`地图数据加载失败（${res.status}）`);
-  const geojson = await res.json();
+  const geojson = await fetchGeo(key);
 
   const rings = extractRings(geojson);
   if (!rings.length) throw new Error('地图数据为空');
