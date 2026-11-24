@@ -2,54 +2,63 @@ import React, { useMemo } from 'react';
 import { lonLatToTile, tileUrl } from '../tiles.js';
 
 /**
- * 街道级底图：把高德栅格瓦片铺到画布上。
- * 瓦片是 Web 墨卡托，这里按「世界像素 = 瓦片坐标 × 256」的规则映射到画布。
+ * 街道级底图：把栅格瓦片铺到画布上。
  *
- * @param {object} bg   doc.canvas.background
- * @param {number} canvasW/H  画布尺寸
+ * 「放大地图」的核心：
+ *   mapZoom 是连续值（例如 15.37）。
+ *   - 整数部分 15 决定用哪一级瓦片（路网详细度由它决定：z 越大，路网越密）
+ *   - 小数部分 0.37 只是把瓦片放大显示（视觉放大，不增加细节）
+ *   所以在 15.0 → 15.99 之间连续拉，瓦片编号不变，只是越来越"糊"；
+ *   跨过 16.0 时换用 z=16 的瓦片，路网立刻变详细。
  */
 export default function TileLayer({ bg, canvasW, canvasH }) {
-  const z = Math.max(3, Math.min(18, Math.round(bg.tileZoom || 15)));
-  const scale = bg.tileScale || 1;
+  const mapZoom = Number.isFinite(Number(bg.mapZoom))
+    ? Number(bg.mapZoom)
+    : (Number(bg.tileZoom) || 15);
+
+  const z = Math.max(3, Math.min(18, Math.floor(mapZoom)));
+  // 视觉放大倍数：小数部分 + 用户手动 scale
+  const subScale = 2 ** (mapZoom - z);
+  const userScale = bg.tileScale || 1;
+  const scale = subScale * userScale;
   const opacity = bg.tileOpacity ?? 1;
 
   const plan = useMemo(() => {
-    const worldSize = 256 * 2 ** z;                 // 整个世界在当前 z 下的像素宽度
     const center = lonLatToTile(bg.centerLon, bg.centerLat, z);
     const cx = center.x * 256;
     const cy = center.y * 256;
 
-    // 画布中心对准 (cx, cy)，再乘 scale
     const halfW = canvasW / 2;
     const halfH = canvasH / 2;
 
-    // 需要覆盖的世界像素范围
+    // 画布覆盖的世界像素范围（缩放越大，覆盖越少）
     const left = cx - halfW / scale;
     const right = cx + halfW / scale;
     const top = cy - halfH / scale;
     const bottom = cy + halfH / scale;
 
+    const maxTile = 2 ** z;
     const minTX = Math.floor(left / 256);
     const maxTX = Math.floor(right / 256);
     const minTY = Math.max(0, Math.floor(top / 256));
-    const maxTY = Math.min(2 ** z - 1, Math.floor(bottom / 256));
+    const maxTY = Math.min(maxTile - 1, Math.floor(bottom / 256));
 
     const tiles = [];
     for (let ty = minTY; ty <= maxTY; ty++) {
       for (let tx = minTX; tx <= maxTX; tx++) {
-        const wx = ((tx % (2 ** z)) + 2 ** z) % (2 ** z);
+        const wrapX = ((tx % maxTile) + maxTile) % maxTile;
         const px = (tx * 256 - cx) * scale + halfW;
         const py = (ty * 256 - cy) * scale + halfH;
         tiles.push({
-          key: `${tx}_${ty}_${z}`,
-          url: tileUrl(wx, ty, z),
+          key: `${wrapX}_${ty}_${z}`,
+          url: tileUrl(wrapX, ty, z),
           x: px,
           y: py,
-          size: 256 * scale + 0.6,   // +0.6 消除瓦片间缝隙
+          size: 256 * scale + 0.8,   // +0.8 消除瓦片缝隙
         });
       }
     }
-    return { tiles, worldSize };
+    return { tiles };
   }, [z, scale, bg.centerLon, bg.centerLat, canvasW, canvasH]);
 
   return (
@@ -63,7 +72,6 @@ export default function TileLayer({ bg, canvasW, canvasH }) {
           width={t.size}
           height={t.size}
           preserveAspectRatio="none"
-          crossOrigin="anonymous"
         />
       ))}
     </g>

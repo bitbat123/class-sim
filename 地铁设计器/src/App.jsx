@@ -6,7 +6,7 @@ import {
   createDoc, createDemoDoc, normalizeDoc, newStation, newLine, newText, saveDoc, loadDoc,
 } from './model.js';
 import { CITIES, CHINA_CODE } from './cities.js';
-import { ZOOM_HINTS } from './tiles.js';
+import { ZOOM_HINTS, zoomHintOf } from './tiles.js';
 import { loadBackground, fitToCanvas } from './background.js';
 
 /** 导出当前画布为 SVG 字符串（含背景） */
@@ -25,6 +25,7 @@ export default function App() {
   const [selectedStation, setSelectedStation] = useState(null);
   const [selectedText, setSelectedText] = useState(null);
   const [zoom, setZoom] = useState(1);
+  const [zoomInited, setZoomInited] = useState(false);
   const [bgState, setBgState] = useState({ status: 'idle', data: null, error: null });
   const [adding, setAdding] = useState(true);
   const [city, setCity] = useState('310000');
@@ -281,12 +282,19 @@ export default function App() {
     setSelectedText(null);
   };
 
-  const fitZoom = () => {
+  const fitZoom = useCallback(() => {
     const w = window.innerWidth - 168 - 320 - 56;
     const h = window.innerHeight - 62 - 52;
     const s = Math.min(w / doc.canvas.width, h / doc.canvas.height);
-    setZoom(Math.max(0.15, Math.min(1.5, +s.toFixed(2))));
-  };
+    setZoom(Math.max(0.08, Math.min(1.5, +s.toFixed(3))));
+  }, [doc.canvas.width, doc.canvas.height]);
+
+  // 初始放大：首次进入时自动缩放到适合窗口，避免 6000×4000 画布一进来只看到左上角
+  useEffect(() => {
+    if (zoomInited) return;
+    fitZoom();
+    setZoomInited(true);
+  }, [zoomInited, fitZoom]);
 
   // 键盘：Delete 删选中，Esc 取消选择
   useEffect(() => {
@@ -387,7 +395,7 @@ export default function App() {
           city={city}
           setCity={setCity}
           onChange={(t) => updateBackground({ type: t })}
-          onTileZoom={(z) => updateBackground({ type: 'tiles', tileZoom: z })}
+          onTileZoom={(z) => updateBackground({ type: 'tiles', mapZoom: z, tileZoom: Math.floor(z) })}
           onPickCity={(code, c, t) => updateBackground({
             type: 'city',
             cityCode: code,
@@ -451,6 +459,7 @@ function BackgroundPicker({ doc, city, setCity, onChange, onPickCity, onTileZoom
   const type = doc.canvas.background.type;
   const bg = doc.canvas.background;
   const curCity = CITIES.find((c) => c.code === (bg.cityCode || city)) || CITIES[0];
+  const mapZoom = Number.isFinite(Number(bg.mapZoom)) ? Number(bg.mapZoom) : (Number(bg.tileZoom) || 15);
 
   return (
     <aside className="bg-picker">
@@ -485,12 +494,25 @@ function BackgroundPicker({ doc, city, setCity, onChange, onPickCity, onTileZoom
 
       {type === 'tiles' && (
         <>
-          <div className="tile-zoom">
-            <label>详细程度</label>
+          <label className="bg-label">
+            放大地图 <b>{mapZoom.toFixed(1)}</b>
+            <small className="muted">（{zoomHintOf(mapZoom)}）</small>
+          </label>
+          <input
+            type="range"
+            className="map-zoom-slider"
+            min={10}
+            max={18}
+            step={0.1}
+            value={mapZoom}
+            onChange={(e) => onTileZoom(Number(e.target.value))}
+            aria-label="放大地图"
+          />
+          <div className="zoom-quick">
             {ZOOM_HINTS.map((h) => (
               <button
                 key={h.z}
-                className={`tile-zoom-btn ${Math.round(bg.tileZoom) === h.z ? 'on' : ''}`}
+                className={`tile-zoom-btn ${Math.floor(mapZoom) === h.z ? 'on' : ''}`}
                 onClick={() => onTileZoom(h.z)}
               >
                 {h.label}
@@ -498,8 +520,8 @@ function BackgroundPicker({ doc, city, setCity, onChange, onPickCity, onTileZoom
             ))}
           </div>
           <p className="muted small">
-            当前 z={Math.round(bg.tileZoom)}（{ZOOM_HINTS.find((h) => h.z === Math.round(bg.tileZoom))?.km || ''}）
-            · 中心 {curCity.lon.toFixed(3)}, {curCity.lat.toFixed(3)}
+            z={mapZoom.toFixed(1)} · 路网{mapZoom >= 16 ? '非常详细' : mapZoom >= 14 ? '详细' : mapZoom >= 12 ? '粗略' : '很粗略'}
+            <br />中心 {curCity.lon.toFixed(3)}, {curCity.lat.toFixed(3)}
           </p>
           <button className="bg-opt tiny" onClick={() => onChange('white')}>切回白纸（省流量）</button>
         </>

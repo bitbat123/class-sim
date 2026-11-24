@@ -41,6 +41,8 @@ export const CANVAS_PRESETS = [
   { w: 3600, h: 2700, name: '3600×2700' },
   { w: 4800, h: 3600, name: '4800×3600' },
   { w: 6000, h: 4000, name: '6000×4000' },
+  { w: 8000, h: 6000, name: '8000×6000' },
+  { w: 12000, h: 9000, name: '12000×9000' },
 ];
 
 export const PALETTE = [
@@ -97,8 +99,8 @@ export function createDoc(name = '未命名线路网') {
     version: 2,
     name,
     canvas: {
-      width: 2400,
-      height: 1600,
+      width: 6000,
+      height: 4000,
       background: {
         type: 'white',      // white | city | china | tiles
         cityCode: '310000',
@@ -109,14 +111,15 @@ export function createDoc(name = '未命名线路网') {
         showNames: true,
         fit: 'contain',     // contain | cover | manual
         // ---- 街道级瓦片 ----
+        mapZoom: 15,
         tileZoom: 15,
-        tileScale: 1,
+        tileScale: 1.6,
         centerLon: 121.4737,
         centerLat: 31.2304,
         tileOpacity: 1,
       },
       showGrid: true,
-      gridSize: 80,
+      gridSize: 120,
       snap: 10,           // 拖动吸附格（0 = 不吸附）
       showScaleBar: false,
     },
@@ -149,8 +152,9 @@ export function normalizeDoc(doc) {
         offsetY: Number(bgIn.offsetY) || 0,
         showNames: bgIn.showNames !== false,
         fit: ['contain', 'cover', 'manual'].includes(bgIn.fit) ? bgIn.fit : 'contain',
+        mapZoom: Number.isFinite(Number(bgIn.mapZoom)) ? Number(bgIn.mapZoom) : (Number(bgIn.tileZoom) || 15),
         tileZoom: Number(bgIn.tileZoom) || 15,
-        tileScale: Number(bgIn.tileScale) || 1,
+        tileScale: Number(bgIn.tileScale) || 1.6,
         centerLon: Number.isFinite(Number(bgIn.centerLon)) ? Number(bgIn.centerLon) : 121.4737,
         centerLat: Number.isFinite(Number(bgIn.centerLat)) ? Number(bgIn.centerLat) : 31.2304,
         tileOpacity: typeof bgIn.tileOpacity === 'number' ? bgIn.tileOpacity : 1,
@@ -317,7 +321,7 @@ export function autoLabelPos(station, neighbors) {
  * 坐标系基于 2400×1600 的画布。
  */
 export function createDemoDoc() {
-  const doc = createDoc('示例 · 三线换乘');
+  const doc = createDoc('示例 · 四线换乘');
   // 同名站复用同一个 id → 自动成为换乘站
   const byName = new Map();
   const S = (x, y, name, labelPos = 'auto') => {
@@ -328,48 +332,69 @@ export function createDemoDoc() {
     byName.set(name, s.id);
     return s.id;
   };
-  const L = (name, color, pattern, width, ids) => {
+  const L = (name, color, pattern, width, ids, extra = {}) => {
     const l = newLine(doc.lines.length);
-    Object.assign(l, { name, color, pattern, width, stationIds: ids });
+    Object.assign(l, { name, color, pattern, width, stationIds: ids }, extra);
     doc.lines.push(l);
     return l;
   };
 
+  // 1 号线：横贯东西（贯穿整个画布宽度）
   const l1 = [
-    S(300, 700, '西站', 'left'),
-    S(600, 700, '人民广场'),
-    S(900, 700, '中山公园'),
-    S(1200, 700, '中央枢纽'),
-    S(1500, 700, '科技园'),
-    S(1800, 700, '东站', 'right'),
+    S(500, 1800, '西站', 'left'),
+    S(1300, 1800, '人民广场'),
+    S(2100, 1800, '中山公园'),
+    S(3000, 1800, '中央枢纽'),
+    S(3900, 1800, '科技园'),
+    S(4700, 1800, '体育馆'),
+    S(5500, 1800, '东站', 'right'),
   ];
+
+  // 2 号线：纵贯南北
   const l2 = [
-    S(1200, 300, '北苑', 'top'),
-    S(1200, 500, '体育中心'),
-    S(1200, 700, '中央枢纽'),
-    S(1200, 900, '老城区'),
-    S(1200, 1100, '南湖', 'bottom'),
+    S(3000, 500, '北苑', 'top'),
+    S(3000, 1150, '体育中心'),
+    S(3000, 1800, '中央枢纽'),
+    S(3000, 2500, '老城区'),
+    S(3000, 3400, '南湖', 'bottom'),
   ];
+
+  // 3 号线：斜穿，两处换乘
   const l3 = [
-    S(900, 700, '中山公园'),
-    S(1000, 900, '文化街'),
-    S(1200, 900, '老城区'),
-    S(1500, 1000, '滨江', 'right'),
+    S(2100, 1800, '中山公园'),
+    S(2400, 2400, '文化街'),
+    S(3000, 2500, '老城区'),
+    S(3900, 2900, '滨江', 'right'),
+    S(4800, 3200, '会展中心', 'right'),
   ];
+
   // 4 号线：环线
   const l4 = [
-    S(700, 1150, '环西'),
-    S(950, 1250, '环南'),
-    S(1250, 1250, '环东'),
-    S(1450, 1150, '环北'),
+    S(1500, 3000, '环西'),
+    S(2100, 3350, '环南'),
+    S(2900, 3350, '环东'),
+    S(3500, 3000, '环北'),
   ];
 
   Object.assign(doc.lines[0], { name: '1 号线', color: '#e4002b', stationIds: l1 });
   L('2 号线', '#0072ce', 'solid', 9, l2);
   L('3 号线', '#00a651', 'dashed', 8, l3);
-  const loop = L('4 号线（环线）', '#8b5cf6', 'solid', 7, l4);
-  loop.loop = true;
-  loop.curve = 1;
+  L('4 号线（环线）', '#8b5cf6', 'solid', 7, l4, { loop: true, curve: 1 });
+
+  // 标题文字
+  doc.texts.push({
+    id: 'tx-title', x: 500, y: 340, text: '示例线路网', size: 56, color: '#0f172a',
+    weight: 700, align: 'left', rotate: 0,
+  });
+  doc.canvas.background = {
+    ...doc.canvas.background,
+    type: 'tiles',
+    cityCode: '310000',
+    centerLon: 121.4737,
+    centerLat: 31.2304,
+    mapZoom: 14,
+    tileScale: 1,
+  };
 
   doc.activeLineId = doc.lines[0].id;
   return normalizeDoc(doc);

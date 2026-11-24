@@ -214,3 +214,9 @@ body {
 }
 .tile-zoom-btn.on { background: rgba(139, 92, 246, 0.28); border-color: var(--accent); }
 .tile-layer image { image-rendering: auto; }
+
+/* 放大地图滑块 */
+.bg-label { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 2px; }
+.bg-label b { font-size: 16px; color: #c4b5fd; }
+.map-zoom-slider { width: 100%; accent-color: #8b5cf6; height: 22px; }
+.zoom-quick { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }

@@ -84,3 +84,20 @@ export const ZOOM_HINTS = [
   { z: 16, label: '街道级', km: '≈2 km' },
   { z: 17, label: '超详细', km: '≈1 km' },
 ];
+
+/** 连续 zoom → 文字描述 */
+export function zoomHintOf(z) {
+  const n = Math.floor(z);
+  const table = {
+    10: '洲际', 11: '全市', 12: '大区', 13: '城区', 14: '街区',
+    15: '详细街区', 16: '街道级', 17: '超详细', 18: '门牌级',
+  };
+  return table[n] || (n < 10 ? '极远' : '极近');
+}
+
+/** 连续 zoom 大致对应的覆盖宽度（画布 6000px 时） */
+export function spanOf(z, canvasW = 6000) {
+  const metersPerPx = (156543.03392 * Math.cos((31.23 * Math.PI) / 180)) / (2 ** z);
+  const km = (metersPerPx * canvasW) / 1000;
+  return km >= 10 ? `≈${Math.round(km)} km` : `≈${km.toFixed(1)} km`;
+}

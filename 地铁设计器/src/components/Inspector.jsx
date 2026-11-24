@@ -349,11 +349,15 @@ function CanvasPanel({ doc, onUpdateCanvas, onUpdateBackground, city, setCity, b
 
       {bg.type === 'tiles' && (
         <>
-          <label>瓦片详细度 z={Math.round(bg.tileZoom)}</label>
-          <input type="range" min={10} max={18} step={1} value={bg.tileZoom} onChange={(e) => setBg('tileZoom', Number(e.target.value))} />
+          <label>放大地图：{(Number.isFinite(Number(bg.mapZoom)) ? Number(bg.mapZoom) : 15).toFixed(1)}</label>
+          <input
+            type="range" min={10} max={18} step={0.1}
+            value={Number.isFinite(Number(bg.mapZoom)) ? Number(bg.mapZoom) : 15}
+            onChange={(e) => setBg('mapZoom', Number(e.target.value))}
+          />
 
-          <label>瓦片大小：{Math.round((bg.tileScale || 1) * 100)}%</label>
-          <input type="range" min={0.5} max={3} step={0.1} value={bg.tileScale || 1} onChange={(e) => setBg('tileScale', Number(e.target.value))} />
+          <label>额外放大：{Math.round((bg.tileScale || 1) * 100)}%</label>
+          <input type="range" min={0.5} max={4} step={0.1} value={bg.tileScale || 1} onChange={(e) => setBg('tileScale', Number(e.target.value))} />
 
           <label>瓦片不透明度：{Math.round((bg.tileOpacity ?? 1) * 100)}%</label>
           <input type="range" min={0.1} max={1} step={0.05} value={bg.tileOpacity ?? 1} onChange={(e) => setBg('tileOpacity', Number(e.target.value))} />
