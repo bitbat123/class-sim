@@ -277,24 +277,33 @@ export default function App() {
   };
 
   const loadDocInto = (d) => {
-    setDoc(normalizeDoc(d));
+    const next = normalizeDoc(d);
+    setDoc(next);
     setSelectedStation(null);
     setSelectedText(null);
+    // 新文档按自己的 initialZoom 打开（默认 0.5 = 50%）
+    setZoom(next.canvas.initialZoom || computeFit(next.canvas.width, next.canvas.height));
   };
 
-  const fitZoom = useCallback(() => {
-    const w = window.innerWidth - 168 - 320 - 56;
-    const h = window.innerHeight - 62 - 52;
-    const s = Math.min(w / doc.canvas.width, h / doc.canvas.height);
-    setZoom(Math.max(0.08, Math.min(1.5, +s.toFixed(3))));
-  }, [doc.canvas.width, doc.canvas.height]);
+  /** 计算适合窗口的缩放比例（不直接 set，方便复用） */
+  const computeFit = useCallback((w, h) => {
+    const availW = Math.max(200, window.innerWidth - 168 - 320 - 56);
+    const availH = Math.max(200, window.innerHeight - 62 - 52);
+    const s = Math.min(availW / w, availH / h);
+    return Math.max(0.08, Math.min(1.5, +s.toFixed(3)));
+  }, []);
 
-  // 初始放大：首次进入时自动缩放到适合窗口，避免 6000×4000 画布一进来只看到左上角
+  const fitZoom = useCallback(() => {
+    setZoom(computeFit(doc.canvas.width, doc.canvas.height));
+  }, [computeFit, doc.canvas.width, doc.canvas.height]);
+
+  // 初始放大：首次进入时按 initialZoom 打开，避免 6000×4000 画布只看到左上角
   useEffect(() => {
     if (zoomInited) return;
-    fitZoom();
+    const z0 = doc.canvas.initialZoom;
+    setZoom(Number.isFinite(z0) && z0 > 0 ? z0 : computeFit(doc.canvas.width, doc.canvas.height));
     setZoomInited(true);
-  }, [zoomInited, fitZoom]);
+  }, [zoomInited, computeFit, doc.canvas.width, doc.canvas.height, doc.canvas.initialZoom]);
 
   // 键盘：Delete 删选中，Esc 取消选择
   useEffect(() => {

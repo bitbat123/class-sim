@@ -331,6 +331,13 @@ function CanvasPanel({ doc, onUpdateCanvas, onUpdateBackground, city, setCity, b
       <label>网格间距：{doc.canvas.gridSize}</label>
       <input type="range" min={20} max={200} step={10} value={doc.canvas.gridSize} onChange={(e) => set('gridSize', Number(e.target.value))} />
 
+      <label>默认缩放：{doc.canvas.initialZoom > 0 ? `${Math.round(doc.canvas.initialZoom * 100)}%` : '自动适应窗口'}</label>
+      <input
+        type="range" min={0} max={1} step={0.01}
+        value={doc.canvas.initialZoom || 0}
+        onChange={(e) => set('initialZoom', Number(e.target.value))}
+      />
+
       <label>拖动吸附：{doc.canvas.snap ? doc.canvas.snap + 'px' : '关闭'}</label>
       <input type="range" min={0} max={50} step={5} value={doc.canvas.snap} onChange={(e) => set('snap', Number(e.target.value))} />
 
