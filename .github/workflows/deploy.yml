@@ -33,6 +33,7 @@ jobs:
             赛车/package-lock.json
             chat/package-lock.json
             地铁设计器/package-lock.json
+            自制游戏/package-lock.json
 
       # ---- 班主任模拟器 ----
       - name: Install (class-teacher)
@@ -87,17 +88,26 @@ jobs:
       - name: Build (metro)
         working-directory: 地铁设计器
         run: npm run build
+      # ---- 自制游戏 ----
+      - name: Install (custom games)
+        working-directory: 自制游戏
+        run: npm ci
+
+      - name: Build (custom games)
+        working-directory: 自制游戏
+        run: npm run build
 
       # 这个仓库发布在 /class-sim/，所以产物根目录就是它本身
       - name: Assemble site
         run: |
-          mkdir -p site/bomb-contest site/gomoku site/racing site/chat site/metro
+          mkdir -p site/bomb-contest site/gomoku site/racing site/chat site/metro site/custom-games
           cp -r 班主任模拟器/dist/. site/
           cp -r 炸弹人大赛/dist/. site/bomb-contest/
           cp -r 五子棋/dist/. site/gomoku/
           cp -r 赛车/dist/. site/racing/
           cp -r chat/dist/. site/chat/
           cp -r 地铁设计器/dist/. site/metro/
+          cp -r 自制游戏/dist/. site/custom-games/
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

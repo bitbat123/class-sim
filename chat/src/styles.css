@@ -72,3 +72,24 @@ h1, h2 { margin: 0; }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .need-login { margin: auto; text-align: center; display: flex; flex-direction: column; gap: 14px; align-items: center; }
+
+/* ---------- 附件 ---------- */
+.msg-files { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.file-chip {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 320px;
+  background: rgba(15, 23, 42, 0.55); border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 8px; padding: 6px 10px; color: var(--text, #e2e8f0);
+  font: inherit; font-size: 12px; cursor: pointer; text-align: left;
+}
+.file-chip:hover { border-color: #8b5cf6; background: rgba(139, 92, 246, 0.14); }
+.file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
+.file-icon { flex-shrink: 0; }
+
+.attach-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.attach-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(139, 92, 246, 0.16); border: 1px solid rgba(139, 92, 246, 0.45);
+  border-radius: 8px; padding: 4px 9px; font-size: 12px;
+}
+.attach-x { background: none; border: none; color: #fca5a5; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px; }
+.compose-btns { display: flex; gap: 8px; align-items: center; }
